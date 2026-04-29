@@ -26,8 +26,9 @@ deploy: check-deploy-vars remote-init
 	$(SSH) $(DEPLOY_HOST) "\
 		mkdir -p $(DEPLOY_PATH)/data/logs $(DEPLOY_PATH)/storage/files && \
 		touch $(DEPLOY_PATH)/data/users.json $(DEPLOY_PATH)/data/logs/actions.log $(DEPLOY_PATH)/storage/files/.gitkeep && \
-		chmod 664 $(DEPLOY_PATH)/data/users.json $(DEPLOY_PATH)/data/logs/actions.log && \
-		chmod 775 $(DEPLOY_PATH)/data $(DEPLOY_PATH)/data/logs $(DEPLOY_PATH)/storage $(DEPLOY_PATH)/storage/files \
+		chgrp -R www-data $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage 2>/dev/null || true && \
+		find $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage -type d -exec chmod 2775 {} \; 2>/dev/null || true && \
+		find $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage -type f -exec chmod 664 {} \; 2>/dev/null || true \
 	"
 
 deploy-dry-run: check-deploy-vars remote-init

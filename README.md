@@ -36,6 +36,8 @@ DEPLOY_PATH=/path/to/browsebox
 
 Then plain `make deploy` will work without embedding environment-specific values in the project defaults.
 
+The deploy helper also normalizes permissions for [data](/home/paul/git-repos/BrowseBox/data) and [storage/files](/home/paul/git-repos/BrowseBox/storage/files) so the web server can rename, move, upload, and delete managed content consistently. It sets the group to `www-data`, applies setgid to directories, and grants group write access recursively.
+
 ## Admin user
 
 Create an admin from the project root:
@@ -57,7 +59,9 @@ The management portal at `/.mgmt` supports:
 - login and logout
 - file upload
 - folder upload with `webkitdirectory`
+- desktop drag-and-drop upload for files and folders in supported browsers
 - folder creation
+- moving files and folders with a move action and direct drag-and-drop onto visible folders and breadcrumbs
 - rename
 - delete
 - editing selected BrowseBox config values from the management UI

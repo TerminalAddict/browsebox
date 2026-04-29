@@ -71,6 +71,31 @@ function browsebox_size_to_bytes(string $value): int
     };
 }
 
+function browsebox_decode_relative_paths(?string $raw): array
+{
+    if ($raw === null || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+
+    if (!is_array($decoded)) {
+        throw new RuntimeException('Invalid dropped file metadata.');
+    }
+
+    $paths = [];
+
+    foreach ($decoded as $value) {
+        if (!is_string($value) || $value === '') {
+            throw new RuntimeException('Invalid dropped file metadata.');
+        }
+
+        $paths[] = $value;
+    }
+
+    return $paths;
+}
+
 function browsebox_log_action(Config $config, ?string $user, string $action, string $target, string $status): void
 {
     $logDir = rtrim($config->requireString('data_root'), '/') . '/logs';
@@ -167,8 +192,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $fileManager->delete($itemPath);
                 browsebox_log_action($config, $user, 'delete', $itemPath, 'success');
                 browsebox_redirect($targetPath, 'Item deleted.');
+            case 'move':
+                $itemPath = $pathGuard->normalizeRelativePath((string) ($_POST['item_path'] ?? ''), false);
+                $destinationPath = $pathGuard->normalizeRelativePath((string) ($_POST['destination_path'] ?? ''));
+                $moved = $fileManager->move($itemPath, $destinationPath);
+                browsebox_log_action($config, $user, 'move', $moved, 'success');
+                browsebox_redirect($destinationPath, 'Item moved.');
             case 'upload':
-                $uploaded = $uploadManager->uploadMany($targetPath, $_FILES['files'] ?? []);
+                $relativePaths = browsebox_decode_relative_paths($_POST['dropped_relative_paths'] ?? null);
+                $uploaded = $uploadManager->uploadManyWithRelativePaths($targetPath, $_FILES['files'] ?? [], $relativePaths);
 
                 foreach ($uploaded as $uploadedPath) {
                     browsebox_log_action($config, $user, 'upload', $uploadedPath, 'success');
@@ -257,13 +289,15 @@ $breadcrumbs = View::breadcrumbs($currentPath);
 $breadcrumbsHtml = '';
 foreach ($breadcrumbs as $index => $crumb) {
     $active = $index === array_key_last($breadcrumbs);
+
     if ($active) {
-        $breadcrumbsHtml .= '<li class="breadcrumb-item active" aria-current="page">' . View::h($crumb['label']) . '</li>';
+        $breadcrumbsHtml .= '<li class="breadcrumb-item active browsebox-move-target" aria-current="page" data-move-target="' . View::h($crumb['path']) . '">' . View::h($crumb['label']) . '</li>';
         continue;
     }
 
-    $query = $crumb['path'] === '' ? '' : '?path=' . rawurlencode($crumb['path']);
-    $breadcrumbsHtml .= '<li class="breadcrumb-item"><a href=".mgmt' . View::h($query) . '">' . View::h($crumb['label']) . '</a></li>';
+    $crumbQuery = $crumb['path'] === '' ? '' : '?path=' . rawurlencode($crumb['path']);
+    $crumbHref = '.mgmt' . $crumbQuery;
+    $breadcrumbsHtml .= '<li class="breadcrumb-item browsebox-move-target" data-move-target="' . View::h($crumb['path']) . '"><a href="' . View::h($crumbHref) . '">' . View::h($crumb['label']) . '</a></li>';
 }
 
 $rows = '';
@@ -272,8 +306,13 @@ foreach ($items as $item) {
     $openHref = $item['type'] === 'dir'
         ? '.mgmt' . $query
         : 'file.php?path=' . rawurlencode($item['relative_path']);
+    $rowAttributes = ' draggable="true" data-move-item="' . View::h($item['relative_path']) . '"';
 
-    $rows .= '<tr>'
+    if ($item['type'] === 'dir') {
+        $rowAttributes .= ' data-move-target="' . View::h($item['relative_path']) . '" class="browsebox-move-target"';
+    }
+
+    $rows .= '<tr' . $rowAttributes . '>'
         . '<td><a class="text-decoration-none fw-semibold" href="' . View::h($openHref) . '">'
         . View::h(View::icon($item['icon'])) . ' ' . View::h($item['name']) . ($item['type'] === 'dir' ? '/' : '')
         . '</a></td>'
@@ -289,6 +328,18 @@ foreach ($items as $item) {
                         ' . $csrf->input() . '
                         <input class="form-control form-control-sm mb-2" name="new_name" value="' . View::h($item['name']) . '" required>
                         <button class="btn btn-sm btn-primary" type="submit">Save</button>
+                    </form>
+                </details>
+                <details class="d-inline-block me-2">
+                    <summary class="btn btn-sm btn-outline-secondary">Move</summary>
+                    <form method="post" class="mt-2 p-2 border rounded bg-light">
+                        <input type="hidden" name="action" value="move">
+                        <input type="hidden" name="path" value="' . View::h($currentPath) . '">
+                        <input type="hidden" name="item_path" value="' . View::h($item['relative_path']) . '">
+                        ' . $csrf->input() . '
+                        <label class="form-label form-label-sm mb-1">Destination folder path</label>
+                        <input class="form-control form-control-sm mb-2" name="destination_path" value="' . View::h($currentPath) . '" placeholder="Use storage-relative path">
+                        <button class="btn btn-sm btn-primary" type="submit">Move</button>
                     </form>
                 </details>
                 <form method="post" class="d-inline" onsubmit="return BrowseBox.confirmDelete(this);">
@@ -383,8 +434,8 @@ $body = $alertHtml . '
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
     <div>
         <h2 class="h4 mb-1">Management</h2>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">' . $breadcrumbsHtml . '</ol>
+        <nav aria-label="breadcrumb" class="browsebox-breadcrumb-wrap">
+            <ol class="breadcrumb browsebox-breadcrumb mb-0">' . $breadcrumbsHtml . '</ol>
         </nav>
     </div>
     <div class="d-flex gap-2">
@@ -404,8 +455,13 @@ $body = $alertHtml . '
                 <form method="post" enctype="multipart/form-data">
                     <input type="hidden" name="action" value="upload">
                     <input type="hidden" name="path" value="' . View::h($currentPath) . '">
+                    <input type="hidden" name="dropped_relative_paths" value="" data-dropped-relative-paths>
                     ' . $csrf->input() . '
                     <p class="small text-secondary mb-3">Step 1: choose files or a folder. Step 2: click the upload button to start the transfer.</p>
+                    <div class="browsebox-dropzone mb-3" data-upload-dropzone>
+                        <div class="browsebox-dropzone-title">Drag files or a folder here</div>
+                        <div class="browsebox-dropzone-text" data-upload-dropzone-text>Desktop drag and drop works here for files and folders.</div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Choose files</label>
                         <div class="browsebox-picker">
@@ -442,6 +498,7 @@ $body = $alertHtml . '
         </div>' . $configSummaryHtml . '
     </div>
     <div class="col-lg-8">
+        <div class="small text-secondary mb-3">Drag items onto visible folder rows or breadcrumbs to move them. Use the <code>Move</code> action for deeper destinations that are not currently visible.</div>
         <div class="card shadow-sm border-0">
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -460,6 +517,13 @@ $body = $alertHtml . '
             </div>
         </div>
     </div>
-</div>';
+</div>
+<form method="post" class="d-none" data-move-form>
+    <input type="hidden" name="action" value="move">
+    <input type="hidden" name="path" value="' . View::h($currentPath) . '" data-move-form-current-path>
+    <input type="hidden" name="item_path" value="" data-move-form-item-path>
+    <input type="hidden" name="destination_path" value="" data-move-form-destination-path>
+    ' . $csrf->input() . '
+</form>';
 
 View::renderPage('BrowseBox Management', $body, 'mgmt', true);

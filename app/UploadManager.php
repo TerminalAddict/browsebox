@@ -18,6 +18,11 @@ final class UploadManager
 
     public function uploadMany(string $targetRelativePath, array $files): array
     {
+        return $this->uploadManyWithRelativePaths($targetRelativePath, $files, []);
+    }
+
+    public function uploadManyWithRelativePaths(string $targetRelativePath, array $files, array $relativePaths): array
+    {
         $targetRelativePath = $this->pathGuard->normalizeRelativePath($targetRelativePath);
         $targetDirectory = $this->pathGuard->resolve($targetRelativePath, true);
 
@@ -31,9 +36,13 @@ final class UploadManager
             throw new RuntimeException('No files were uploaded.');
         }
 
+        if ($relativePaths !== [] && count($relativePaths) !== count($normalizedFiles)) {
+            throw new RuntimeException('Dropped file metadata did not match uploaded files.');
+        }
+
         $uploaded = [];
 
-        foreach ($normalizedFiles as $file) {
+        foreach ($normalizedFiles as $index => $file) {
             if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 throw new RuntimeException('Upload failed with error code ' . (int) ($file['error'] ?? -1) . '.');
             }
@@ -46,7 +55,7 @@ final class UploadManager
                 throw new RuntimeException('Invalid uploaded file.');
             }
 
-            $relativeUploadPath = $fullPath !== '' ? $fullPath : basename($originalName);
+            $relativeUploadPath = $relativePaths[$index] ?? ($fullPath !== '' ? $fullPath : basename($originalName));
             $safeUploadPath = $this->pathGuard->validateUploadRelativePath($relativeUploadPath);
             $destinationRelativePath = $targetRelativePath === ''
                 ? $safeUploadPath

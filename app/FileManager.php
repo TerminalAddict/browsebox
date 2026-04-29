@@ -92,6 +92,44 @@ final class FileManager
         return $targetRelativePath;
     }
 
+    public function move(string $relativePath, string $destinationDirectoryRelativePath): string
+    {
+        $sourceRelativePath = $this->pathGuard->normalizeRelativePath($relativePath, false);
+        $destinationDirectoryRelativePath = $this->pathGuard->normalizeRelativePath($destinationDirectoryRelativePath);
+
+        $sourcePath = $this->pathGuard->resolve($sourceRelativePath, true);
+        $destinationDirectoryPath = $this->pathGuard->resolve($destinationDirectoryRelativePath, true);
+
+        if (!is_dir($destinationDirectoryPath)) {
+            throw new RuntimeException('Move destination is not a directory.');
+        }
+
+        $name = basename($sourceRelativePath);
+        $targetRelativePath = $destinationDirectoryRelativePath === ''
+            ? $name
+            : $destinationDirectoryRelativePath . '/' . $name;
+
+        if ($targetRelativePath === $sourceRelativePath) {
+            throw new RuntimeException('Item is already in that folder.');
+        }
+
+        if (is_dir($sourcePath) && str_starts_with($destinationDirectoryRelativePath . '/', $sourceRelativePath . '/')) {
+            throw new RuntimeException('Cannot move a folder into itself.');
+        }
+
+        $targetPath = $this->pathGuard->resolve($targetRelativePath);
+
+        if (file_exists($targetPath)) {
+            throw new RuntimeException('Target already exists.');
+        }
+
+        if (!rename($sourcePath, $targetPath)) {
+            throw new RuntimeException('Unable to move item.');
+        }
+
+        return $targetRelativePath;
+    }
+
     public function delete(string $relativePath): void
     {
         $fullPath = $this->pathGuard->resolve($relativePath, true);
