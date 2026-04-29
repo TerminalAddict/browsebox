@@ -65,8 +65,8 @@ foreach ($result['items'] as $item) {
         . View::h($item['name'])
         . ($isDir ? '/' : '')
         . '</a></td>'
-        . '<td>' . View::h(View::formatSize(is_int($item['size']) ? $item['size'] : null)) . '</td>'
-        . '<td>' . View::h(View::formatDate(is_int($item['modified']) ? $item['modified'] : null)) . '</td>'
+        . '<td data-label="Size">' . View::h(View::formatSize(is_int($item['size']) ? $item['size'] : null)) . '</td>'
+        . '<td data-label="Modified">' . View::h(View::formatDate(is_int($item['modified']) ? $item['modified'] : null)) . '</td>'
         . '</tr>';
 }
 
@@ -97,7 +97,7 @@ $body = '
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0">' . $breadcrumbsHtml . '</ol>
         </nav>
-        <div class="table-responsive">
+        <div class="table-responsive browsebox-public-list">
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
