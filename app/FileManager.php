@@ -59,6 +59,48 @@ final class FileManager
         return $items;
     }
 
+    public function listDirectoryTree(string $relativePath = ''): array
+    {
+        $directoryPath = $this->pathGuard->resolve($relativePath, true);
+
+        if (!is_dir($directoryPath)) {
+            throw new RuntimeException('Not a directory.');
+        }
+
+        $entries = scandir($directoryPath);
+
+        if ($entries === false) {
+            throw new RuntimeException('Unable to read directory tree.');
+        }
+
+        $directories = [];
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..' || str_starts_with($entry, '.')) {
+                continue;
+            }
+
+            $itemRelativePath = $this->pathGuard->join($relativePath, $entry);
+            $itemPath = $this->pathGuard->resolve($itemRelativePath, true);
+
+            if (!is_dir($itemPath)) {
+                continue;
+            }
+
+            $directories[] = [
+                'name' => $entry,
+                'relative_path' => $itemRelativePath,
+                'children' => $this->listDirectoryTree($itemRelativePath),
+            ];
+        }
+
+        usort($directories, static function (array $left, array $right): int {
+            return strcasecmp((string) $left['name'], (string) $right['name']);
+        });
+
+        return $directories;
+    }
+
     public function createDirectory(string $parentRelativePath, string $name): string
     {
         $relativePath = $this->pathGuard->join($parentRelativePath, $name);

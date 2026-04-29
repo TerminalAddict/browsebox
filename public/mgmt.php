@@ -140,6 +140,57 @@ function browsebox_redirect(string $path, ?string $message = null, string $type 
     exit;
 }
 
+function browsebox_tree_branch_open(string $nodePath, string $currentPath): bool
+{
+    if ($nodePath === '') {
+        return true;
+    }
+
+    return $currentPath === $nodePath || ($currentPath !== '' && str_starts_with($currentPath . '/', $nodePath . '/'));
+}
+
+function browsebox_render_tree_nodes(array $nodes, string $currentPath): string
+{
+    if ($nodes === []) {
+        return '';
+    }
+
+    $html = '<ul class="list-unstyled browsebox-tree-list mb-0">';
+
+    foreach ($nodes as $node) {
+        $relativePath = (string) ($node['relative_path'] ?? '');
+        $name = (string) ($node['name'] ?? '');
+        $children = is_array($node['children'] ?? null) ? $node['children'] : [];
+        $href = '.mgmt?path=' . rawurlencode($relativePath);
+        $rowClass = 'browsebox-tree-row browsebox-move-target' . ($relativePath === $currentPath ? ' is-current' : '');
+        $label = View::h(View::icon('folder')) . ' ' . View::h($name);
+
+        if ($children === []) {
+            $html .= '<li class="browsebox-tree-item">'
+                . '<div class="' . $rowClass . '" data-move-target="' . View::h($relativePath) . '">'
+                . '<span class="browsebox-tree-toggle-spacer" aria-hidden="true"></span>'
+                . '<a class="browsebox-tree-link" href="' . View::h($href) . '">' . $label . '</a>'
+                . '</div>'
+                . '</li>';
+            continue;
+        }
+
+        $open = browsebox_tree_branch_open($relativePath, $currentPath) ? ' open' : '';
+
+        $html .= '<li class="browsebox-tree-item">'
+            . '<details class="browsebox-tree-node"' . $open . '>'
+            . '<summary class="' . $rowClass . '" data-move-target="' . View::h($relativePath) . '" data-move-expand="1">'
+            . '<span class="browsebox-tree-toggle" aria-hidden="true"></span>'
+            . '<a class="browsebox-tree-link" href="' . View::h($href) . '" onclick="event.stopPropagation();">' . $label . '</a>'
+            . '</summary>'
+            . browsebox_render_tree_nodes($children, $currentPath)
+            . '</details>'
+            . '</li>';
+    }
+
+    return $html . '</ul>';
+}
+
 $currentPath = '';
 
 try {
@@ -285,6 +336,12 @@ try {
     $alertHtml .= '<div class="alert alert-danger">' . View::h($exception->getMessage()) . '</div>';
 }
 
+try {
+    $directoryTree = $fileManager->listDirectoryTree();
+} catch (RuntimeException) {
+    $directoryTree = [];
+}
+
 $breadcrumbs = View::breadcrumbs($currentPath);
 $breadcrumbsHtml = '';
 foreach ($breadcrumbs as $index => $crumb) {
@@ -358,6 +415,13 @@ if ($rows === '') {
 }
 
 $publicPath = '../' . ($currentPath === '' ? '' : str_replace('%2F', '/', rawurlencode($currentPath)) . '/');
+$currentFolderLabel = $currentPath === '' ? 'Home' : basename($currentPath);
+$treeHtml = '
+<div class="browsebox-tree-root-row browsebox-tree-row browsebox-move-target' . ($currentPath === '' ? ' is-current' : '') . '" data-move-target="">
+    <span class="browsebox-tree-toggle-spacer" aria-hidden="true"></span>
+    <a class="browsebox-tree-link" href=".mgmt">' . View::h(View::icon('folder')) . ' Home</a>
+</div>'
+    . browsebox_render_tree_nodes($directoryTree, $currentPath);
 $blockedExtensions = array_map(
     static fn (mixed $value): string => (string) $value,
     (array) $config->get('blocked_upload_extensions', [])
@@ -449,6 +513,18 @@ $body = $alertHtml . '
 </div>
 <div class="row g-4">
     <div class="col-lg-4">
+        <div class="card shadow-sm border-0 mb-4 browsebox-folder-pane">
+            <div class="card-body p-0">
+                <div class="d-flex align-items-center justify-content-between gap-3 px-3 py-3 border-bottom">
+                    <div>
+                        <h3 class="h5 mb-1">Folders</h3>
+                        <div class="small text-secondary">Drag onto any folder in this tree.</div>
+                    </div>
+                    <a class="btn btn-outline-secondary btn-sm" href=".mgmt">Home</a>
+                </div>
+                <div class="browsebox-tree-scroll p-3">' . $treeHtml . '</div>
+            </div>
+        </div>
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body">
                 <h3 class="h5 mb-3">Upload Files or Folders</h3>
@@ -498,8 +574,16 @@ $body = $alertHtml . '
         </div>' . $configSummaryHtml . '
     </div>
     <div class="col-lg-8">
-        <div class="small text-secondary mb-3">Drag items onto visible folder rows or breadcrumbs to move them. Use the <code>Move</code> action for deeper destinations that are not currently visible.</div>
         <div class="card shadow-sm border-0">
+            <div class="card-body border-bottom py-3">
+                <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                    <div>
+                        <h3 class="h5 mb-1">' . View::h($currentFolderLabel) . '</h3>
+                        <div class="small text-secondary">Drag items onto visible folder rows, the folder tree, or breadcrumbs to move them.</div>
+                    </div>
+                    <div class="small text-secondary">Use the <code>Move</code> action for destinations outside the visible tree.</div>
+                </div>
+            </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">

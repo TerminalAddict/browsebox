@@ -61,7 +61,7 @@ The management portal at `/.mgmt` supports:
 - folder upload with `webkitdirectory`
 - desktop drag-and-drop upload for files and folders in supported browsers
 - folder creation
-- moving files and folders with a move action and direct drag-and-drop onto visible folders and breadcrumbs
+- moving files and folders with a move action and direct drag-and-drop onto visible folders, breadcrumbs, and the persistent folder tree
 - rename
 - delete
 - editing selected BrowseBox config values from the management UI

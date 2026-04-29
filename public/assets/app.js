@@ -71,9 +71,15 @@ window.BrowseBox = {
 
     moveDragItemPath: null,
     moveActiveTarget: null,
+    moveHoverTimer: null,
 
     clearMoveHighlights() {
         window.BrowseBox.moveActiveTarget = null;
+
+        if (window.BrowseBox.moveHoverTimer) {
+            window.clearTimeout(window.BrowseBox.moveHoverTimer);
+            window.BrowseBox.moveHoverTimer = null;
+        }
 
         document.querySelectorAll('[data-move-target].is-dragover').forEach((target) => {
             if (target instanceof HTMLElement) {
@@ -114,6 +120,17 @@ window.BrowseBox = {
             window.BrowseBox.clearMoveHighlights();
             window.BrowseBox.moveActiveTarget = target;
             target.classList.add('is-dragover');
+
+            if (target.dataset.moveExpand === '1') {
+                const details = target.closest('details');
+
+                if (details instanceof HTMLDetailsElement && !details.open) {
+                    window.BrowseBox.moveHoverTimer = window.setTimeout(() => {
+                        details.open = true;
+                        window.BrowseBox.moveHoverTimer = null;
+                    }, 500);
+                }
+            }
         };
 
         moveItems.forEach((item) => {
