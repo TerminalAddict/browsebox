@@ -36,7 +36,9 @@ DEPLOY_PATH=/path/to/browsebox
 
 Then plain `make deploy` will work without embedding environment-specific values in the project defaults.
 
-The deploy helper also normalizes permissions for [data](/home/paul/git-repos/BrowseBox/data) and [storage/files](/home/paul/git-repos/BrowseBox/storage/files) so the web server can rename, move, upload, and delete managed content consistently. It sets the group to `www-data`, applies setgid to directories, and grants group write access recursively.
+The deploy helper also normalizes permissions for [data](/home/paul/git-repos/BrowseBox/data), [storage/files](/home/paul/git-repos/BrowseBox/storage/files), and [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails) so the web server can rename, move, upload, delete managed content, write cached thumbnails, and persist remember-login tokens consistently. It sets the group to `www-data`, applies setgid to directories, and grants group write access recursively.
+
+Deploys also preserve the live server copy of [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php), [data/users.json](/home/paul/git-repos/BrowseBox/data/users.json), [data/remember_tokens.json](/home/paul/git-repos/BrowseBox/data/remember_tokens.json), and [data/logs/actions.log](/home/paul/git-repos/BrowseBox/data/logs/actions.log), so settings changed through `/.mgmt`, saved users, remember-login tokens, and logs are not overwritten by `make deploy`. On a brand-new server, missing runtime files are created automatically.
 
 ## Admin user
 
@@ -50,18 +52,21 @@ The script prompts for a password and stores a `password_hash()` value in [data/
 
 ## Storage
 
-Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). The public browser lists folders first, shows size and modified time, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads and inline rendering can be controlled safely.
+Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). Generated image thumbnails are cached under [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails). The public browser supports both `List View` and `Icon View`, lists folders first, shows size and modified time, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads, inline rendering, and thumbnail responses can be controlled safely.
+
+`Icon View` uses local SVG file-type icons from [public/assets/file-icons](/home/paul/git-repos/BrowseBox/public/assets/file-icons). Raster image thumbnails are generated on demand and cached by file path plus file timestamp, so updated images automatically get a new thumbnail cache key. Thumbnail generation uses PHP GD when available; if GD is missing, image files fall back to their normal icon or inline image rendering.
 
 ## Management
 
 The management portal at `/.mgmt` supports:
 
 - login and logout
+- optional `Remember me on this device` persistent login
 - file upload
 - folder upload with `webkitdirectory`
 - desktop drag-and-drop upload for files and folders in supported browsers
 - folder creation
-- moving files and folders with a move action and direct drag-and-drop onto visible folders, breadcrumbs, and the persistent folder tree
+- moving files and folders with direct drag-and-drop onto visible folders, breadcrumbs, and the persistent folder tree
 - rename
 - delete
 - editing selected BrowseBox config values from the management UI
@@ -142,6 +147,7 @@ Security requirements:
 - Management portal requires login
 - Passwords are hashed
 - Sessions use secure cookie settings
+- Persistent login uses a separate random remember-token cookie with server-side hashed token storage
 - CSRF tokens protect management POST actions
 - Destructive actions use POST, not GET
 - Path traversal is blocked
@@ -168,9 +174,23 @@ Blocked upload extensions:
 
 HTML files are allowed to render publicly because BrowseBox is intended to host public content uploaded by the owner.
 
-Public HTML is served with a restrictive `Content-Security-Policy` sandbox so rendered projects do not share a normal browser origin with the management portal. This reduces the risk that uploaded HTML can interact with an authenticated `/.mgmt` session.
+Public HTML can optionally be served with a restrictive `Content-Security-Policy` sandbox so rendered projects do not share a normal browser origin with the management portal. This reduces the risk that uploaded HTML can interact with an authenticated `/.mgmt` session.
 
 If a trusted HTML project needs normal browser features such as `sessionStorage`, `localStorage`, or same-origin `fetch`/XHR to sibling files, disable `sandbox_public_html` in the management configuration panel or in [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php). This restores normal browser behavior for public HTML at the cost of reduced isolation.
+
+## Remember me
+
+The management login form includes a `Remember me on this device` checkbox.
+
+When enabled:
+
+- the normal PHP session is still used first
+- a separate long-lived cookie is also issued
+- only a hash of the remember token is stored server-side in [data/remember_tokens.json](/home/paul/git-repos/BrowseBox/data/remember_tokens.json)
+- the token is rotated after successful automatic re-authentication
+- logout clears both the session cookie and the remember cookie
+
+This is intended for trusted personal devices. Avoid enabling it on shared machines.
 
 ## Configuration in management
 

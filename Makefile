@@ -7,9 +7,12 @@ RSYNC_EXCLUDES := \
 	--exclude '.DS_Store' \
 	--exclude '.make.local' \
 	--exclude 'Makefile' \
+	--exclude 'config/config.php' \
 	--exclude 'data/users.json' \
+	--exclude 'data/remember_tokens.json' \
 	--exclude 'data/logs/actions.log' \
-	--exclude 'storage/files/*'
+	--exclude 'storage/files/*' \
+	--exclude 'storage/thumbnails/*'
 
 .PHONY: deploy deploy-dry-run remote-init check-deploy-vars
 
@@ -23,9 +26,12 @@ check-deploy-vars:
 
 deploy: check-deploy-vars remote-init
 	$(RSYNC) $(RSYNC_FLAGS) $(RSYNC_EXCLUDES) ./ $(DEPLOY_HOST):$(DEPLOY_PATH)/
+	@if ! $(SSH) $(DEPLOY_HOST) "test -f $(DEPLOY_PATH)/config/config.php"; then \
+		$(RSYNC) $(RSYNC_FLAGS) ./config/config.php $(DEPLOY_HOST):$(DEPLOY_PATH)/config/config.php; \
+	fi
 	$(SSH) $(DEPLOY_HOST) "\
-		mkdir -p $(DEPLOY_PATH)/data/logs $(DEPLOY_PATH)/storage/files && \
-		touch $(DEPLOY_PATH)/data/users.json $(DEPLOY_PATH)/data/logs/actions.log $(DEPLOY_PATH)/storage/files/.gitkeep && \
+		mkdir -p $(DEPLOY_PATH)/data/logs $(DEPLOY_PATH)/storage/files $(DEPLOY_PATH)/storage/thumbnails && \
+		touch $(DEPLOY_PATH)/data/users.json $(DEPLOY_PATH)/data/remember_tokens.json $(DEPLOY_PATH)/data/logs/actions.log $(DEPLOY_PATH)/storage/files/.gitkeep $(DEPLOY_PATH)/storage/thumbnails/.gitkeep && \
 		chgrp -R www-data $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage 2>/dev/null || true && \
 		find $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage -type d -exec chmod 2775 {} \; 2>/dev/null || true && \
 		find $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage -type f -exec chmod 664 {} \; 2>/dev/null || true \
@@ -43,4 +49,5 @@ remote-init: check-deploy-vars
 			$(DEPLOY_PATH)/public/assets \
 			$(DEPLOY_PATH)/scripts \
 			$(DEPLOY_PATH)/storage/files \
+			$(DEPLOY_PATH)/storage/thumbnails \
 	"

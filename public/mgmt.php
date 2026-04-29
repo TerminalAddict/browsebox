@@ -207,7 +207,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'login') {
             $username = trim((string) ($_POST['username'] ?? ''));
-            $success = $auth->login($username, (string) ($_POST['password'] ?? ''));
+            $remember = isset($_POST['remember_me']) && $_POST['remember_me'] === '1';
+            $success = $auth->login($username, (string) ($_POST['password'] ?? ''), $remember);
             browsebox_log_action($config, $username, 'login', '', $success ? 'success' : 'failure');
 
             if (!$success) {
@@ -318,6 +319,10 @@ if (!$auth->check()) {
                             <label class="form-label" for="password">Password</label>
                             <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required>
                         </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" id="remember_me" name="remember_me" type="checkbox" value="1">
+                            <label class="form-check-label" for="remember_me">Remember me on this device</label>
+                        </div>
                         <button class="btn btn-primary w-100" type="submit">Sign In</button>
                     </form>
                 </div>
@@ -363,42 +368,33 @@ foreach ($items as $item) {
     $openHref = $item['type'] === 'dir'
         ? '.mgmt' . $query
         : 'file.php?path=' . rawurlencode($item['relative_path']);
-    $rowAttributes = ' draggable="true" data-move-item="' . View::h($item['relative_path']) . '"';
+    $rowAttributes = ' draggable="true" data-move-item="' . View::h($item['relative_path']) . '" data-rename-row="1"';
 
     if ($item['type'] === 'dir') {
         $rowAttributes .= ' data-move-target="' . View::h($item['relative_path']) . '" class="browsebox-move-target"';
     }
 
-    $rows .= '<tr' . $rowAttributes . '>'
-        . '<td><a class="text-decoration-none fw-semibold" href="' . View::h($openHref) . '">'
+    $nameHtml = '<div class="browsebox-item-primary" data-rename-view>'
+        . '<a class="text-decoration-none fw-semibold" href="' . View::h($openHref) . '">'
         . View::h(View::icon($item['icon'])) . ' ' . View::h($item['name']) . ($item['type'] === 'dir' ? '/' : '')
-        . '</a></td>'
+        . '</a>'
+        . '</div>'
+        . '<form method="post" class="browsebox-inline-rename d-none" data-rename-form>'
+        . '<input type="hidden" name="action" value="rename">'
+        . '<input type="hidden" name="path" value="' . View::h($currentPath) . '">'
+        . '<input type="hidden" name="item_path" value="' . View::h($item['relative_path']) . '">'
+        . $csrf->input()
+        . '<input class="form-control form-control-sm" name="new_name" value="' . View::h($item['name']) . '" data-rename-input data-original-name="' . View::h($item['name']) . '" required>'
+        . '<button class="btn btn-sm btn-primary" type="submit">Save</button>'
+        . '<button class="btn btn-sm btn-outline-secondary" type="button" data-rename-cancel>Cancel</button>'
+        . '</form>';
+
+    $rows .= '<tr' . $rowAttributes . '>'
+        . '<td>' . $nameHtml . '</td>'
         . '<td>' . View::h(View::formatSize(is_int($item['size']) ? $item['size'] : null)) . '</td>'
         . '<td>' . View::h(View::formatDate(is_int($item['modified']) ? $item['modified'] : null)) . '</td>'
         . '<td class="text-end">
-                <details class="d-inline-block me-2">
-                    <summary class="btn btn-sm btn-outline-secondary">Rename</summary>
-                    <form method="post" class="mt-2 p-2 border rounded bg-light">
-                        <input type="hidden" name="action" value="rename">
-                        <input type="hidden" name="path" value="' . View::h($currentPath) . '">
-                        <input type="hidden" name="item_path" value="' . View::h($item['relative_path']) . '">
-                        ' . $csrf->input() . '
-                        <input class="form-control form-control-sm mb-2" name="new_name" value="' . View::h($item['name']) . '" required>
-                        <button class="btn btn-sm btn-primary" type="submit">Save</button>
-                    </form>
-                </details>
-                <details class="d-inline-block me-2">
-                    <summary class="btn btn-sm btn-outline-secondary">Move</summary>
-                    <form method="post" class="mt-2 p-2 border rounded bg-light">
-                        <input type="hidden" name="action" value="move">
-                        <input type="hidden" name="path" value="' . View::h($currentPath) . '">
-                        <input type="hidden" name="item_path" value="' . View::h($item['relative_path']) . '">
-                        ' . $csrf->input() . '
-                        <label class="form-label form-label-sm mb-1">Destination folder path</label>
-                        <input class="form-control form-control-sm mb-2" name="destination_path" value="' . View::h($currentPath) . '" placeholder="Use storage-relative path">
-                        <button class="btn btn-sm btn-primary" type="submit">Move</button>
-                    </form>
-                </details>
+                <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-rename-toggle>Rename</button>
                 <form method="post" class="d-inline" onsubmit="return BrowseBox.confirmDelete(this);">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="path" value="' . View::h($currentPath) . '">
@@ -581,7 +577,6 @@ $body = $alertHtml . '
                         <h3 class="h5 mb-1">' . View::h($currentFolderLabel) . '</h3>
                         <div class="small text-secondary">Drag items onto visible folder rows, the folder tree, or breadcrumbs to move them.</div>
                     </div>
-                    <div class="small text-secondary">Use the <code>Move</code> action for destinations outside the visible tree.</div>
                 </div>
             </div>
             <div class="card-body p-0">

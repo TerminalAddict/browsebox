@@ -165,4 +165,25 @@ HTML;
             default => '📄',
         };
     }
+
+    public static function publicIconAsset(string $type, string $filename = ''): string
+    {
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+        return match (true) {
+            $type === 'folder' => 'folder.svg',
+            in_array($extension, ['xls', 'xlsx', 'ods', 'csv'], true) => 'spreadsheet.svg',
+            in_array($extension, ['doc', 'docx', 'odt', 'rtf'], true) => 'document.svg',
+            in_array($extension, ['ppt', 'pptx', 'odp'], true) => 'slides.svg',
+            in_array($extension, ['txt', 'md'], true) => 'text.svg',
+            in_array($extension, ['php', 'phtml', 'js', 'mjs', 'ts', 'tsx', 'jsx', 'css', 'scss', 'json', 'xml', 'yml', 'yaml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'py', 'rb', 'pl', 'java', 'c', 'cpp', 'h', 'hpp', 'sql'], true) => 'code.svg',
+            $type === 'archive' => 'archive.svg',
+            $type === 'html' => 'html.svg',
+            $type === 'pdf' => 'pdf.svg',
+            $type === 'audio' => 'audio.svg',
+            $type === 'video' => 'video.svg',
+            $type === 'image' => 'image.svg',
+            default => 'file.svg',
+        };
+    }
 }

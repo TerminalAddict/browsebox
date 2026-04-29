@@ -227,6 +227,134 @@ window.BrowseBox = {
         form.submit();
     },
 
+    initRenameUI() {
+        const rows = Array.from(document.querySelectorAll('[data-rename-row]'));
+
+        const closeRenameRow = (row, resetInput = true) => {
+            if (!(row instanceof HTMLElement)) {
+                return;
+            }
+
+            const view = row.querySelector('[data-rename-view]');
+            const form = row.querySelector('[data-rename-form]');
+            const input = row.querySelector('[data-rename-input]');
+
+            if (view instanceof HTMLElement) {
+                view.classList.remove('d-none');
+            }
+
+            if (form instanceof HTMLElement) {
+                form.classList.add('d-none');
+            }
+
+            if (input instanceof HTMLInputElement && resetInput) {
+                input.value = input.dataset.originalName ?? input.value;
+            }
+
+            row.classList.remove('is-renaming');
+            row.draggable = true;
+        };
+
+        const closeOtherRenameRows = (activeRow) => {
+            rows.forEach((row) => {
+                if (row !== activeRow) {
+                    closeRenameRow(row);
+                }
+            });
+        };
+
+        const openRenameRow = (row) => {
+            if (!(row instanceof HTMLElement)) {
+                return;
+            }
+
+            closeOtherRenameRows(row);
+
+            const view = row.querySelector('[data-rename-view]');
+            const form = row.querySelector('[data-rename-form]');
+            const input = row.querySelector('[data-rename-input]');
+
+            if (view instanceof HTMLElement) {
+                view.classList.add('d-none');
+            }
+
+            if (form instanceof HTMLElement) {
+                form.classList.remove('d-none');
+            }
+
+            row.classList.add('is-renaming');
+            row.draggable = false;
+
+            if (input instanceof HTMLInputElement) {
+                window.setTimeout(() => {
+                    input.focus();
+                    input.select();
+                }, 0);
+            }
+        };
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const renameToggle = target.closest('[data-rename-toggle]');
+
+            if (renameToggle instanceof HTMLElement) {
+                const row = renameToggle.closest('[data-rename-row]');
+
+                if (row instanceof HTMLElement) {
+                    event.preventDefault();
+                    openRenameRow(row);
+                }
+
+                return;
+            }
+
+            const renameCancel = target.closest('[data-rename-cancel]');
+
+            if (renameCancel instanceof HTMLElement) {
+                const row = renameCancel.closest('[data-rename-row]');
+
+                if (row instanceof HTMLElement) {
+                    event.preventDefault();
+                    closeRenameRow(row);
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            const target = event.target;
+
+            if (event.key !== 'Escape' || !(target instanceof HTMLInputElement) || !target.hasAttribute('data-rename-input')) {
+                return;
+            }
+
+            const row = target.closest('[data-rename-row]');
+
+            if (row instanceof HTMLElement) {
+                event.preventDefault();
+                closeRenameRow(row);
+            }
+        });
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+
+            if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-rename-form')) {
+                return;
+            }
+
+            const row = form.closest('[data-rename-row]');
+
+            if (row instanceof HTMLElement) {
+                row.draggable = false;
+            }
+        });
+    },
+
     async handleDrop(event) {
         event.preventDefault();
 
@@ -421,5 +549,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.BrowseBox.initMoveUI();
+    window.BrowseBox.initRenameUI();
     window.BrowseBox.updateUploadState();
 });
