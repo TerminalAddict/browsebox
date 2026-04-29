@@ -1,9 +1,9 @@
 RewriteEngine On
-Options -Indexes
+Options -Indexes -MultiViews
 
 RewriteRule ^\.mgmt/?$ mgmt.php [L,QSA]
 RewriteRule ^\.mgmt/(.*)$ mgmt.php [L,QSA]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php?path=$1 [L,QSA]
+RewriteRule ^(.*)$ index.php?path=$1 [B,L,QSA]

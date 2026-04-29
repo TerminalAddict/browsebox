@@ -45,6 +45,7 @@ final class FileManager
                 'size' => $isDir ? null : filesize($itemPath),
                 'modified' => filemtime($itemPath) ?: null,
                 'icon' => $isDir ? 'folder' : $this->iconForFile($entry),
+                'has_entrypoint' => $isDir ? $this->directoryHasEntrypoint($itemPath) : false,
             ];
         }
 
@@ -238,5 +239,16 @@ final class FileManager
             'mp4', 'webm', 'mov', 'mkv' => 'video',
             default => 'file',
         };
+    }
+
+    private function directoryHasEntrypoint(string $directoryPath): bool
+    {
+        foreach (['index.html', 'index.htm', 'index.php'] as $candidate) {
+            if (is_file($directoryPath . '/' . $candidate)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

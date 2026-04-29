@@ -95,20 +95,25 @@ foreach ($result['items'] as $item) {
         ? View::publicFolderHref($currentPath, $item['name'])
         : rawurlencode($item['name']);
     $hrefWithView = $isDir ? $withView($href) : $href;
+    $linkAttributes = $isDir ? '' : ' target="_blank" rel="noopener"';
     $iconAsset = $assetPrefix . '/file-icons/' . View::publicIconAsset((string) $item['icon'], (string) $item['name']);
     $previewUrl = $imagePreviewUrl($item);
+    $hasEntrypoint = $isDir && (bool) ($item['has_entrypoint'] ?? false);
     $sizeLabel = View::formatSize(is_int($item['size']) ? $item['size'] : null);
     $modifiedLabel = View::formatDate(is_int($item['modified']) ? $item['modified'] : null);
     $metaLabel = $isDir ? 'Folder' : $sizeLabel;
+    $folderHintHtml = $hasEntrypoint ? '<span class="browsebox-entrypoint-badge">Web App</span>' : '';
+    $overlayHtml = $hasEntrypoint ? '<span class="browsebox-entrypoint-overlay">Web App</span>' : '';
     $previewHtml = $previewUrl !== null
         ? '<img class="browsebox-file-preview" src="' . View::h($previewUrl) . '" alt="">'
         : '<img class="browsebox-file-icon" src="' . View::h($iconAsset) . '" alt="">';
 
     $rows .= '<tr>'
-        . '<td><a class="text-decoration-none fw-semibold browsebox-public-row-link" href="' . View::h($hrefWithView) . '">'
+        . '<td><a class="text-decoration-none fw-semibold browsebox-public-row-link" href="' . View::h($hrefWithView) . '"' . $linkAttributes . '>'
         . '<img class="browsebox-inline-file-icon" src="' . View::h($iconAsset) . '" alt=""> '
         . View::h($item['name'])
         . ($isDir ? '/' : '')
+        . $folderHintHtml
         . '</a></td>'
         . '<td data-label="Size">' . View::h($sizeLabel) . '</td>'
         . '<td data-label="Modified">' . View::h($modifiedLabel) . '</td>'
@@ -116,8 +121,9 @@ foreach ($result['items'] as $item) {
 
     $iconCards .= '
     <div class="browsebox-public-icon-cell">
-        <a class="browsebox-icon-card text-decoration-none" href="' . View::h($hrefWithView) . '">
+        <a class="browsebox-icon-card text-decoration-none" href="' . View::h($hrefWithView) . '"' . $linkAttributes . '>
             <div class="browsebox-icon-card-preview">
+                ' . $overlayHtml . '
                 ' . $previewHtml . '
             </div>
             <div class="browsebox-icon-card-body">
