@@ -7,6 +7,7 @@ return [
     'management_path' => '/.mgmt',
     'default_timezone' => 'Pacific/Auckland',
     'allow_html_rendering' => true,
+    'sandbox_public_html' => false,
     'max_upload_size' => '2048M',
     'blocked_upload_extensions' => [
         'php', 'phtml', 'phar', 'cgi', 'pl', 'py', 'rb', 'asp', 'aspx', 'jsp',

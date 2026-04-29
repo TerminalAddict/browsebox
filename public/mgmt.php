@@ -185,6 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updatedConfig = $config->all();
                 $updatedConfig['default_timezone'] = $timezone;
                 $updatedConfig['allow_html_rendering'] = isset($_POST['allow_html_rendering']);
+                $updatedConfig['sandbox_public_html'] = isset($_POST['sandbox_public_html']);
                 $updatedConfig['max_upload_size'] = browsebox_validate_upload_size((string) ($_POST['max_upload_size'] ?? ''));
                 $updatedConfig['blocked_upload_extensions'] = browsebox_parse_extensions((string) ($_POST['blocked_upload_extensions'] ?? ''));
                 $updatedConfig['force_download_extensions'] = browsebox_parse_extensions((string) ($_POST['force_download_extensions'] ?? ''));
@@ -343,6 +344,11 @@ $configSummaryHtml = '
             <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" id="allow_html_rendering" name="allow_html_rendering" ' . ((bool) $config->get('allow_html_rendering', false) ? 'checked' : '') . '>
                 <label class="form-check-label" for="allow_html_rendering">Allow HTML rendering</label>
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="sandbox_public_html" name="sandbox_public_html" ' . ((bool) $config->get('sandbox_public_html', false) ? 'checked' : '') . '>
+                <label class="form-check-label" for="sandbox_public_html">Sandbox public HTML</label>
+                <div class="form-text">Safer when enabled, but some HTML projects will break because browser storage and same-origin requests are restricted.</div>
             </div>
             <div class="mb-3">
                 <label class="form-label" for="max_upload_size">Max upload size</label>

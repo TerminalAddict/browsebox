@@ -166,12 +166,15 @@ HTML files are allowed to render publicly because BrowseBox is intended to host 
 
 Public HTML is served with a restrictive `Content-Security-Policy` sandbox so rendered projects do not share a normal browser origin with the management portal. This reduces the risk that uploaded HTML can interact with an authenticated `/.mgmt` session.
 
+If a trusted HTML project needs normal browser features such as `sessionStorage`, `localStorage`, or same-origin `fetch`/XHR to sibling files, disable `sandbox_public_html` in the management configuration panel or in [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php). This restores normal browser behavior for public HTML at the cost of reduced isolation.
+
 ## Configuration in management
 
 The logged-in management page includes a configuration form for these keys from [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php):
 
 - `default_timezone`
 - `allow_html_rendering`
+- `sandbox_public_html`
 - `max_upload_size`
 - `blocked_upload_extensions`
 - `force_download_extensions`

@@ -30,6 +30,7 @@ final class FileResponder
             (array) $this->config->get('blocked_upload_extensions', [])
         );
         $allowHtmlRendering = (bool) $this->config->get('allow_html_rendering', false);
+        $sandboxPublicHtml = (bool) $this->config->get('sandbox_public_html', false);
         $inline = true;
 
         if (in_array($extension, $forceDownloadExtensions, true) || in_array($extension, $blockedExtensions, true)) {
@@ -49,7 +50,7 @@ final class FileResponder
         header('Referrer-Policy: no-referrer');
         header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . '; filename="' . addslashes(basename($fullPath)) . '"');
 
-        if ($isInlineHtml) {
+        if ($isInlineHtml && $sandboxPublicHtml) {
             // Public HTML is intentionally supported, but it must not share a normal browser origin
             // with the management portal.
             header("Content-Security-Policy: sandbox allow-scripts allow-forms allow-downloads allow-modals");
