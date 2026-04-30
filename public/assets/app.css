@@ -562,18 +562,38 @@ details summary::-webkit-details-marker {
         border-radius: 0.9rem;
         background: rgba(255, 255, 255, 0.88);
         box-shadow: 0 8px 20px rgba(25, 62, 97, 0.06);
+        overflow: hidden;
     }
 
     .browsebox-public-list td {
+        min-width: 0;
         white-space: normal;
         border: 0;
         padding: 0;
+        overflow-wrap: anywhere;
     }
 
     .browsebox-public-list td + td {
         margin-top: 0.4rem;
         font-size: 0.92rem;
         color: #4f647b;
+    }
+
+    .browsebox-public-row-link {
+        display: flex;
+        align-items: flex-start;
+        min-width: 0;
+    }
+
+    .browsebox-public-row-link > span,
+    .browsebox-public-row-link > img,
+    .browsebox-public-row-link > .browsebox-entrypoint-badge {
+        flex: 0 0 auto;
+    }
+
+    .browsebox-public-row-link {
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     .browsebox-public-list td[data-label]::before {
