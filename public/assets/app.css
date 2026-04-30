@@ -84,6 +84,10 @@ body.browsebox-body {
     border-radius: 1rem;
 }
 
+.shadow-xl {
+    box-shadow: 0 1.35rem 3rem rgba(25, 62, 97, 0.18) !important;
+}
+
 .table td,
 .table th {
     white-space: nowrap;
@@ -576,6 +580,14 @@ details summary::-webkit-details-marker {
 .browsebox-folder-pane {
     position: sticky;
     top: 1rem;
+    z-index: 10;
+    isolation: isolate;
+}
+
+.browsebox-current-pane.is-sticky-enabled {
+    position: sticky;
+    top: 1rem;
+    z-index: 9;
 }
 
 .browsebox-tree-scroll {
@@ -749,6 +761,10 @@ details summary::-webkit-details-marker {
 
 @media (max-width: 767.98px) {
     .browsebox-folder-pane {
+        position: static;
+    }
+
+    .browsebox-current-pane.is-sticky-enabled {
         position: static;
     }
 

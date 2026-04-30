@@ -568,7 +568,7 @@ $body = $alertHtml . '
 </div>
 <div class="row g-4">
     <div class="col-lg-4">
-        <div class="card shadow-sm border-0 mb-4 browsebox-folder-pane">
+        <div class="card shadow-xl border-0 mb-4 browsebox-folder-pane">
             <div class="card-body p-0">
                 <div class="d-flex align-items-center justify-content-between gap-3 px-3 py-3 border-bottom">
                     <div>
@@ -613,7 +613,7 @@ $body = $alertHtml . '
                 </form>
             </div>
         </div>
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-xl border-0">
             <div class="card-body">
                 <h3 class="h5 mb-3">Create Folder</h3>
                 <form method="post">
@@ -629,7 +629,7 @@ $body = $alertHtml . '
         </div>' . $searchIndexHtml . $configSummaryHtml . '
     </div>
     <div class="col-lg-8">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-xl border-0 browsebox-current-pane" data-conditional-sticky>
             <div class="card-body border-bottom py-3">
                 <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
                     <div>

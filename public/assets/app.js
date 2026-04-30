@@ -437,6 +437,34 @@ window.BrowseBox = {
         });
     },
 
+    initConditionalSticky() {
+        const panes = Array.from(document.querySelectorAll('[data-conditional-sticky]'));
+
+        if (panes.length === 0) {
+            return;
+        }
+
+        const update = () => {
+            panes.forEach((pane) => {
+                if (!(pane instanceof HTMLElement)) {
+                    return;
+                }
+
+                if (window.innerWidth < 992) {
+                    pane.classList.remove('is-sticky-enabled');
+                    return;
+                }
+
+                const viewportAllowance = window.innerHeight - 32;
+                const paneHeight = pane.offsetHeight;
+                pane.classList.toggle('is-sticky-enabled', paneHeight <= viewportAllowance);
+            });
+        };
+
+        update();
+        window.addEventListener('resize', update, { passive: true });
+    },
+
     async handleDrop(event) {
         event.preventDefault();
 
@@ -633,5 +661,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.BrowseBox.initMoveUI();
     window.BrowseBox.initPublicViewToggle();
     window.BrowseBox.initRenameUI();
+    window.BrowseBox.initConditionalSticky();
     window.BrowseBox.updateUploadState();
 });
