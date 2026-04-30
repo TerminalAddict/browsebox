@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/app/PathGuard.php';
 require_once dirname(__DIR__) . '/app/Auth.php';
 require_once dirname(__DIR__) . '/app/Csrf.php';
 require_once dirname(__DIR__) . '/app/FileManager.php';
+require_once dirname(__DIR__) . '/app/SearchIndex.php';
 require_once dirname(__DIR__) . '/app/UploadManager.php';
 require_once dirname(__DIR__) . '/app/View.php';
 
@@ -15,6 +16,7 @@ $pathGuard = new PathGuard($config->requireString('storage_root'));
 $auth = new Auth($config);
 $csrf = new Csrf();
 $fileManager = new FileManager($pathGuard);
+$searchIndex = new SearchIndex($config, $pathGuard, $fileManager);
 $uploadManager = new UploadManager($pathGuard, $config);
 $navActionHtml = '';
 
@@ -124,6 +126,14 @@ function browsebox_log_action(Config $config, ?string $user, string $action, str
     );
 
     file_put_contents($logFile, $line, FILE_APPEND | LOCK_EX);
+}
+
+function browsebox_try_sync_search_index(callable $callback): void
+{
+    try {
+        $callback();
+    } catch (Throwable) {
+    }
 }
 
 function browsebox_redirect(string $path, ?string $message = null, string $type = 'success'): never
@@ -245,33 +255,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 browsebox_redirect('', 'Signed out.');
             case 'mkdir':
                 $created = $fileManager->createDirectory($targetPath, (string) ($_POST['folder_name'] ?? ''));
+                browsebox_try_sync_search_index(static fn () => $searchIndex->indexPath($created));
                 browsebox_log_action($config, $user, 'mkdir', $created, 'success');
                 browsebox_redirect($targetPath, 'Folder created.');
             case 'rename':
                 $itemPath = $pathGuard->normalizeRelativePath((string) ($_POST['item_path'] ?? ''), false);
                 $renamed = $fileManager->rename($itemPath, (string) ($_POST['new_name'] ?? ''));
+                browsebox_try_sync_search_index(static fn () => $searchIndex->movePath($itemPath, $renamed));
                 browsebox_log_action($config, $user, 'rename', $renamed, 'success');
                 browsebox_redirect($pathGuard->parent($renamed), 'Item renamed.');
             case 'delete':
                 $itemPath = $pathGuard->normalizeRelativePath((string) ($_POST['item_path'] ?? ''), false);
                 $fileManager->delete($itemPath);
+                browsebox_try_sync_search_index(static fn () => $searchIndex->removePath($itemPath));
                 browsebox_log_action($config, $user, 'delete', $itemPath, 'success');
                 browsebox_redirect($targetPath, 'Item deleted.');
             case 'move':
                 $itemPath = $pathGuard->normalizeRelativePath((string) ($_POST['item_path'] ?? ''), false);
                 $destinationPath = $pathGuard->normalizeRelativePath((string) ($_POST['destination_path'] ?? ''));
                 $moved = $fileManager->move($itemPath, $destinationPath);
+                browsebox_try_sync_search_index(static fn () => $searchIndex->movePath($itemPath, $moved));
                 browsebox_log_action($config, $user, 'move', $moved, 'success');
                 browsebox_redirect($destinationPath, 'Item moved.');
             case 'upload':
                 $relativePaths = browsebox_decode_relative_paths($_POST['dropped_relative_paths'] ?? null);
                 $uploaded = $uploadManager->uploadManyWithRelativePaths($targetPath, $_FILES['files'] ?? [], $relativePaths);
 
+                browsebox_try_sync_search_index(function () use ($searchIndex, $uploaded): void {
+                    foreach ($uploaded as $uploadedPath) {
+                        $searchIndex->indexPath((string) $uploadedPath);
+                    }
+                });
+
                 foreach ($uploaded as $uploadedPath) {
                     browsebox_log_action($config, $user, 'upload', $uploadedPath, 'success');
                 }
 
                 browsebox_redirect($targetPath, 'Uploaded ' . count($uploaded) . ' file(s).');
+            case 'rebuild_search_index':
+                $searchIndex->rebuild();
+                browsebox_log_action($config, $user, 'search_rebuild', 'data/search-index.json', 'success');
+                browsebox_redirect($currentPath, 'Search index rebuilt.');
             case 'save_config':
                 $timezone = trim((string) ($_POST['default_timezone'] ?? ''));
 
@@ -453,6 +477,36 @@ $uploadStatusLabel = $uploadStatusGood ? 'Good' : 'Warning';
 $fileCountStatusGood = $phpMaxFileUploads >= 100;
 $fileCountStatusClass = $fileCountStatusGood ? 'success' : 'danger';
 $fileCountStatusLabel = $fileCountStatusGood ? 'Good' : 'Warning';
+try {
+    $searchIndexStatus = $searchIndex->status();
+} catch (RuntimeException) {
+    $searchIndexStatus = [
+        'exists' => false,
+        'built_at' => null,
+        'document_count' => 0,
+        'pdf_text_extractor' => 'fallback',
+    ];
+}
+$searchBuiltAtLabel = is_string($searchIndexStatus['built_at'] ?? null) && (string) $searchIndexStatus['built_at'] !== ''
+    ? View::formatDate(strtotime((string) $searchIndexStatus['built_at']) ?: null)
+    : 'Not built yet';
+$searchIndexHtml = '
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-body">
+        <h3 class="h5 mb-3">Search Index</h3>
+        <div class="small text-secondary mb-3">Search is backed by an on-disk index for filename and readable-file content matches.</div>
+        <div class="small mb-1">Last built: <strong>' . View::h($searchBuiltAtLabel) . '</strong></div>
+        <div class="small mb-1">Indexed documents: <strong>' . View::h((string) ($searchIndexStatus['document_count'] ?? 0)) . '</strong></div>
+        <div class="small mb-3">PDF text extractor: <strong>' . View::h((string) ($searchIndexStatus['pdf_text_extractor'] ?? 'fallback')) . '</strong></div>
+        <form method="post">
+            <input type="hidden" name="action" value="rebuild_search_index">
+            <input type="hidden" name="path" value="' . View::h($currentPath) . '">
+            ' . $csrf->input() . '
+            <button class="btn btn-outline-secondary btn-sm" type="submit">Rebuild Search Index</button>
+        </form>
+        <div class="form-text mt-2">Use this after adding files directly on the server outside BrowseBox.</div>
+    </div>
+</div>';
 $configSummaryHtml = '
 <div class="card shadow-sm border-0 mt-4">
     <div class="card-body">
@@ -572,7 +626,7 @@ $body = $alertHtml . '
                     <button class="btn btn-primary" type="submit">Create</button>
                 </form>
             </div>
-        </div>' . $configSummaryHtml . '
+        </div>' . $searchIndexHtml . $configSummaryHtml . '
     </div>
     <div class="col-lg-8">
         <div class="card shadow-sm border-0">

@@ -154,6 +154,30 @@ HTML;
         return $up <= 0 ? './' : str_repeat('../', $up);
     }
 
+    public static function publicRelativeHref(string $currentRelativePath, string $targetPath, bool $isDirectory): string
+    {
+        $currentSegments = $currentRelativePath === '' ? [] : explode('/', $currentRelativePath);
+        $targetSegments = $targetPath === '' ? [] : explode('/', $targetPath);
+        $shared = 0;
+        $maxShared = min(count($currentSegments), count($targetSegments));
+
+        while ($shared < $maxShared && $currentSegments[$shared] === $targetSegments[$shared]) {
+            $shared++;
+        }
+
+        $up = count($currentSegments) - $shared;
+        $remaining = array_slice($targetSegments, $shared);
+        $prefix = $up <= 0 ? '' : str_repeat('../', $up);
+        $encoded = implode('/', array_map('rawurlencode', $remaining));
+        $href = $prefix . $encoded;
+
+        if ($href === '') {
+            return './';
+        }
+
+        return $isDirectory ? $href . '/' : $href;
+    }
+
     public static function icon(string $type): string
     {
         return match ($type) {

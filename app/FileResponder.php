@@ -60,6 +60,63 @@ final class FileResponder
         exit;
     }
 
+    public function serveDirectoryArchive(string $relativePath): never
+    {
+        if (!class_exists('ZipArchive')) {
+            throw new RuntimeException('ZIP archive downloads are not available on this server.');
+        }
+
+        $relativePath = $this->pathGuard->normalizeRelativePath($relativePath, false);
+        $directoryPath = $this->pathGuard->resolve($relativePath, true);
+
+        if (!is_dir($directoryPath)) {
+            throw new RuntimeException('Not found');
+        }
+
+        $archiveName = basename($relativePath) . '.zip';
+        $tempFile = tempnam(sys_get_temp_dir(), 'browsebox-zip-');
+
+        if ($tempFile === false) {
+            throw new RuntimeException('Unable to create ZIP archive.');
+        }
+
+        $zip = new ZipArchive();
+        $archiveOpen = false;
+
+        try {
+            $result = $zip->open($tempFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+            if ($result !== true) {
+                throw new RuntimeException('Unable to open ZIP archive for writing.');
+            }
+
+            $archiveOpen = true;
+
+            $this->addDirectoryToArchive($zip, $directoryPath, basename($relativePath));
+            $zip->close();
+            $archiveOpen = false;
+
+            clearstatcache(true, $tempFile);
+
+            header('Content-Type: application/zip');
+            header('Content-Length: ' . (string) filesize($tempFile));
+            header('X-Content-Type-Options: nosniff');
+            header('Referrer-Policy: no-referrer');
+            header('Content-Disposition: attachment; filename="' . addslashes($archiveName) . '"');
+
+            readfile($tempFile);
+            exit;
+        } finally {
+            if ($archiveOpen) {
+                @$zip->close();
+            }
+
+            if (is_file($tempFile)) {
+                @unlink($tempFile);
+            }
+        }
+    }
+
     private function detectMimeType(string $fullPath, string $extension): string
     {
         $byExtension = [
@@ -105,5 +162,33 @@ final class FileResponder
         }
 
         return 'application/octet-stream';
+    }
+
+    private function addDirectoryToArchive(ZipArchive $zip, string $directoryPath, string $archivePath): void
+    {
+        $zip->addEmptyDir($archivePath);
+        $entries = scandir($directoryPath);
+
+        if ($entries === false) {
+            throw new RuntimeException('Unable to read folder for archive download.');
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..' || str_starts_with($entry, '.')) {
+                continue;
+            }
+
+            $fullPath = $directoryPath . '/' . $entry;
+            $entryArchivePath = $archivePath . '/' . $entry;
+
+            if (is_dir($fullPath)) {
+                $this->addDirectoryToArchive($zip, $fullPath, $entryArchivePath);
+                continue;
+            }
+
+            if (!is_file($fullPath) || !$zip->addFile($fullPath, $entryArchivePath)) {
+                throw new RuntimeException('Unable to add file to ZIP archive.');
+            }
+        }
     }
 }

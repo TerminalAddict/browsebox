@@ -1,2 +1,4 @@
 .make.local
 .DS_Store
+data/search-index.json
+data/search-cache/*.txt

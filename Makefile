@@ -10,6 +10,8 @@ RSYNC_EXCLUDES := \
 	--exclude 'config/config.php' \
 	--exclude 'data/users.json' \
 	--exclude 'data/remember_tokens.json' \
+	--exclude 'data/search-index.json' \
+	--exclude 'data/search-cache/*' \
 	--exclude 'data/logs/actions.log' \
 	--exclude 'storage/files/*' \
 	--exclude 'storage/thumbnails/*'
@@ -30,7 +32,7 @@ deploy: check-deploy-vars remote-init
 		$(RSYNC) $(RSYNC_FLAGS) ./config/config.php $(DEPLOY_HOST):$(DEPLOY_PATH)/config/config.php; \
 	fi
 	$(SSH) $(DEPLOY_HOST) "\
-		mkdir -p $(DEPLOY_PATH)/data/logs $(DEPLOY_PATH)/storage/files $(DEPLOY_PATH)/storage/thumbnails && \
+		mkdir -p $(DEPLOY_PATH)/data/logs $(DEPLOY_PATH)/data/search-cache $(DEPLOY_PATH)/storage/files $(DEPLOY_PATH)/storage/thumbnails && \
 		touch $(DEPLOY_PATH)/data/users.json $(DEPLOY_PATH)/data/remember_tokens.json $(DEPLOY_PATH)/data/logs/actions.log $(DEPLOY_PATH)/storage/files/.gitkeep $(DEPLOY_PATH)/storage/thumbnails/.gitkeep && \
 		chgrp -R www-data $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage 2>/dev/null || true && \
 		find $(DEPLOY_PATH)/data $(DEPLOY_PATH)/storage -type d -exec chmod 2775 {} \; 2>/dev/null || true && \
@@ -46,6 +48,7 @@ remote-init: check-deploy-vars
 			$(DEPLOY_PATH)/app \
 			$(DEPLOY_PATH)/config \
 			$(DEPLOY_PATH)/data/logs \
+			$(DEPLOY_PATH)/data/search-cache \
 			$(DEPLOY_PATH)/public/assets \
 			$(DEPLOY_PATH)/scripts \
 			$(DEPLOY_PATH)/storage/files \

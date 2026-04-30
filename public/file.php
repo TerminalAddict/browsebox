@@ -11,6 +11,7 @@ $config = new Config(dirname(__DIR__) . '/config/config.php');
 $pathGuard = new PathGuard($config->requireString('storage_root'));
 $requestedPath = (string) ($_GET['path'] ?? '');
 $thumbnailRequested = isset($_GET['thumbnail']) && $_GET['thumbnail'] === '1';
+$zipRequested = isset($_GET['download']) && $_GET['download'] === 'zip';
 $fileResponder = new FileResponder($config, $pathGuard);
 $thumbnailManager = new ThumbnailManager($pathGuard);
 
@@ -19,8 +20,13 @@ try {
         $thumbnailManager->serve($requestedPath);
     }
 
+    if ($zipRequested) {
+        $fileResponder->serveDirectoryArchive($requestedPath);
+    }
+
     $fileResponder->serve($requestedPath);
-} catch (RuntimeException) {
-    http_response_code(404);
-    exit('Not found');
+} catch (RuntimeException $exception) {
+    $notFound = in_array($exception->getMessage(), ['Not found', 'Path does not exist.'], true);
+    http_response_code($notFound ? 404 : 500);
+    exit($notFound ? 'Not found' : 'Unable to serve resource');
 }
