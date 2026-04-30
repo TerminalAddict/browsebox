@@ -16,6 +16,15 @@ $auth = new Auth($config);
 $csrf = new Csrf();
 $fileManager = new FileManager($pathGuard);
 $uploadManager = new UploadManager($pathGuard, $config);
+$navActionHtml = '';
+
+if ($auth->check()) {
+    $navActionHtml = '<form method="post" action=".mgmt" class="browsebox-nav-form">'
+        . '<input type="hidden" name="action" value="logout">'
+        . $csrf->input()
+        . '<button class="nav-link" type="submit">Logout</button>'
+        . '</form>';
+}
 
 function browsebox_parse_extensions(string $raw): array
 {
@@ -175,16 +184,20 @@ function browsebox_render_tree_nodes(array $nodes, string $currentPath): string
             continue;
         }
 
-        $open = browsebox_tree_branch_open($relativePath, $currentPath) ? ' open' : '';
+        $isOpen = browsebox_tree_branch_open($relativePath, $currentPath);
+        $openClass = $isOpen ? ' is-open' : '';
+        $childId = 'browsebox-tree-' . substr(sha1($relativePath), 0, 12);
 
         $html .= '<li class="browsebox-tree-item">'
-            . '<details class="browsebox-tree-node"' . $open . '>'
-            . '<summary class="' . $rowClass . '" data-move-target="' . View::h($relativePath) . '" data-move-expand="1">'
+            . '<div class="' . $rowClass . $openClass . '" data-tree-item="' . View::h($relativePath) . '" data-move-target="' . View::h($relativePath) . '" data-move-expand="1">'
+            . '<button class="browsebox-tree-summary" type="button" aria-expanded="' . ($isOpen ? 'true' : 'false') . '" aria-controls="' . View::h($childId) . '" aria-label="Toggle ' . View::h($name) . '" data-tree-toggle>'
             . '<span class="browsebox-tree-toggle" aria-hidden="true"></span>'
-            . '<a class="browsebox-tree-link" href="' . View::h($href) . '" onclick="event.stopPropagation();">' . $label . '</a>'
-            . '</summary>'
+            . '</button>'
+            . '<a class="browsebox-tree-link" href="' . View::h($href) . '">' . $label . '</a>'
+            . '</div>'
+            . '<div class="browsebox-tree-children"' . ($isOpen ? '' : ' hidden') . ' id="' . View::h($childId) . '">'
             . browsebox_render_tree_nodes($children, $currentPath)
-            . '</details>'
+            . '</div>'
             . '</li>';
     }
 
@@ -498,14 +511,6 @@ $body = $alertHtml . '
             <ol class="breadcrumb browsebox-breadcrumb mb-0">' . $breadcrumbsHtml . '</ol>
         </nav>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="' . View::h($publicPath) . '">Open Public View</a>
-        <form method="post" class="d-inline">
-            <input type="hidden" name="action" value="logout">
-            ' . $csrf->input() . '
-            <button class="btn btn-outline-dark" type="submit">Logout</button>
-        </form>
-    </div>
 </div>
 <div class="row g-4">
     <div class="col-lg-4">
@@ -605,4 +610,4 @@ $body = $alertHtml . '
     ' . $csrf->input() . '
 </form>';
 
-View::renderPage('BrowseBox Management', $body, 'mgmt', true);
+View::renderPage('BrowseBox Management', $body, 'mgmt', true, $navActionHtml);

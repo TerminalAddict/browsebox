@@ -9,7 +9,7 @@ final class View
         return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
     }
 
-    public static function renderPage(string $title, string $body, string $active = 'public', bool $showNav = false): void
+    public static function renderPage(string $title, string $body, string $active = 'public', bool $showNav = false, string $navActionHtml = ''): void
     {
         $titleEscaped = self::h($title);
         $publicClass = $active === 'public' ? 'active' : '';
@@ -24,10 +24,12 @@ final class View
         $navHtml = '';
 
         if ($showNav) {
+            $navActionHtml = $navActionHtml === '' ? '' : $navActionHtml;
             $navHtml = <<<HTML
             <nav class="nav nav-pills browsebox-nav">
                 <a class="nav-link {$publicClass}" href="{$publicHref}">Public</a>
                 <a class="nav-link {$mgmtClass}" href="{$mgmtHref}">Management</a>
+                {$navActionHtml}
             </nav>
 HTML;
         }

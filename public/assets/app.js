@@ -95,6 +95,29 @@ window.BrowseBox = {
 
     initMoveUI() {
         const moveItems = Array.from(document.querySelectorAll('[data-move-item]'));
+        const openTreeItem = (item) => {
+            if (!(item instanceof HTMLElement) || item.classList.contains('is-open')) {
+                return;
+            }
+
+            item.classList.add('is-open');
+
+            const toggle = item.querySelector('[data-tree-toggle]');
+            const childrenId = toggle instanceof HTMLElement ? toggle.getAttribute('aria-controls') : null;
+
+            if (toggle instanceof HTMLElement) {
+                toggle.setAttribute('aria-expanded', 'true');
+            }
+
+            if (typeof childrenId === 'string' && childrenId !== '') {
+                const children = document.getElementById(childrenId);
+
+                if (children instanceof HTMLElement) {
+                    children.hidden = false;
+                }
+            }
+        };
+
         const resolveMoveTarget = (rawTarget) => {
             if (rawTarget instanceof Element) {
                 return rawTarget.closest('[data-move-target]');
@@ -122,11 +145,11 @@ window.BrowseBox = {
             target.classList.add('is-dragover');
 
             if (target.dataset.moveExpand === '1') {
-                const details = target.closest('details');
+                const treeItem = target.closest('[data-tree-item]');
 
-                if (details instanceof HTMLDetailsElement && !details.open) {
+                if (treeItem instanceof HTMLElement && !treeItem.classList.contains('is-open')) {
                     window.BrowseBox.moveHoverTimer = window.setTimeout(() => {
-                        details.open = true;
+                        openTreeItem(treeItem);
                         window.BrowseBox.moveHoverTimer = null;
                     }, 500);
                 }
@@ -211,6 +234,40 @@ window.BrowseBox = {
 
             window.BrowseBox.clearMoveHighlights();
         });
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const toggle = target.closest('[data-tree-toggle]');
+
+            if (!(toggle instanceof HTMLElement)) {
+                return;
+            }
+
+            const treeItem = toggle.closest('[data-tree-item]');
+            const childrenId = toggle.getAttribute('aria-controls');
+
+            if (!(treeItem instanceof HTMLElement) || typeof childrenId !== 'string' || childrenId === '') {
+                return;
+            }
+
+            event.preventDefault();
+
+            const children = document.getElementById(childrenId);
+
+            if (!(children instanceof HTMLElement)) {
+                return;
+            }
+
+            const isOpen = treeItem.classList.contains('is-open');
+            treeItem.classList.toggle('is-open', !isOpen);
+            children.hidden = isOpen;
+            toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+        });
     },
 
     submitMove(itemPath, destinationPath) {
@@ -225,6 +282,31 @@ window.BrowseBox = {
         itemInput.value = itemPath;
         destinationInput.value = destinationPath;
         form.submit();
+    },
+
+    initPublicViewToggle() {
+        const toggles = Array.from(document.querySelectorAll('[data-public-view-toggle]'));
+
+        if (toggles.length === 0) {
+            return;
+        }
+
+        toggles.forEach((toggle) => {
+            if (!(toggle instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            toggle.addEventListener('click', () => {
+                const viewMode = toggle.dataset.publicViewToggle;
+
+                if (viewMode !== 'list' && viewMode !== 'icons') {
+                    return;
+                }
+
+                document.cookie = `browsebox_public_view=${encodeURIComponent(viewMode)}; Max-Age=31536000; Path=/; SameSite=Strict`;
+                window.location.reload();
+            });
+        });
     },
 
     initRenameUI() {
@@ -549,6 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.BrowseBox.initMoveUI();
+    window.BrowseBox.initPublicViewToggle();
     window.BrowseBox.initRenameUI();
     window.BrowseBox.updateUploadState();
 });

@@ -52,7 +52,7 @@ The script prompts for a password and stores a `password_hash()` value in [data/
 
 ## Storage
 
-Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). Generated image thumbnails are cached under [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails). The public browser supports both `List View` and `Icon View`, lists folders first, shows size and modified time, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads, inline rendering, and thumbnail responses can be controlled safely.
+Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). Generated image thumbnails are cached under [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails). The public browser supports both `List View` and `Icon View`, remembers the selected view in a persistent browser cookie, lists folders first, shows size and modified time, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads, inline rendering, and thumbnail responses can be controlled safely.
 
 `Icon View` uses local SVG file-type icons from [public/assets/file-icons](/home/paul/git-repos/BrowseBox/public/assets/file-icons). Raster image thumbnails are generated on demand and cached by file path plus file timestamp, so updated images automatically get a new thumbnail cache key. Thumbnail generation uses PHP GD when available; if GD is missing, image files fall back to their normal icon or inline image rendering.
 

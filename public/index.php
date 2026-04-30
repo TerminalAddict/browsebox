@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/Config.php';
 require_once dirname(__DIR__) . '/app/Auth.php';
+require_once dirname(__DIR__) . '/app/Csrf.php';
 require_once dirname(__DIR__) . '/app/FileResponder.php';
 require_once dirname(__DIR__) . '/app/PathGuard.php';
 require_once dirname(__DIR__) . '/app/FileManager.php';
@@ -13,6 +14,7 @@ require_once dirname(__DIR__) . '/app/View.php';
 
 $config = new Config(dirname(__DIR__) . '/config/config.php');
 $auth = new Auth($config);
+$csrf = new Csrf();
 $pathGuard = new PathGuard($config->requireString('storage_root'));
 $fileManager = new FileManager($pathGuard);
 $browser = new PublicBrowser($fileManager, $pathGuard, $config);
@@ -20,9 +22,19 @@ $fileResponder = new FileResponder($config, $pathGuard);
 $thumbnailManager = new ThumbnailManager($pathGuard);
 $showNav = $auth->check();
 $appName = (string) $config->get('app_name', 'BrowseBox');
+$viewCookieName = 'browsebox_public_view';
+$navActionHtml = '';
+
+if ($showNav) {
+    $navActionHtml = '<form method="post" action="./.mgmt" class="browsebox-nav-form">'
+        . '<input type="hidden" name="action" value="logout">'
+        . $csrf->input()
+        . '<button class="nav-link" type="submit">Logout</button>'
+        . '</form>';
+}
 
 $requestedPath = $_GET['path'] ?? '';
-$requestedViewMode = (string) ($_GET['view'] ?? 'list');
+$requestedViewMode = (string) ($_COOKIE[$viewCookieName] ?? 'list');
 $viewMode = in_array($requestedViewMode, ['list', 'icons'], true) ? $requestedViewMode : 'list';
 
 try {
@@ -49,7 +61,8 @@ try {
         'BrowseBox',
         '<div class="alert alert-danger mb-0">' . View::h($exception->getMessage()) . '</div>',
         'public',
-        $showNav
+        $showNav,
+        $navActionHtml
     );
     exit;
 }
@@ -58,17 +71,8 @@ $currentPath = $result['current_path'];
 $prefix = View::relativePrefix($currentPath);
 $assetPrefix = $prefix . 'assets';
 $fileHandlerPrefix = $prefix . 'file.php';
-$viewQuery = '?view=' . rawurlencode($viewMode);
 $rows = '';
 $iconCards = '';
-
-$withView = static function (string $href) use ($viewQuery): string {
-    if ($href === '') {
-        return $viewQuery;
-    }
-
-    return $href . (str_contains($href, '?') ? '&' : '?') . ltrim($viewQuery, '?');
-};
 
 $imagePreviewUrl = static function (array $item) use ($thumbnailManager, $fileHandlerPrefix): ?string {
     if (($item['type'] ?? '') !== 'file' || ($item['icon'] ?? '') !== 'image') {
@@ -94,7 +98,6 @@ foreach ($result['items'] as $item) {
     $href = $isDir
         ? View::publicFolderHref($currentPath, $item['name'])
         : rawurlencode($item['name']);
-    $hrefWithView = $isDir ? $withView($href) : $href;
     $linkAttributes = $isDir ? '' : ' target="_blank" rel="noopener"';
     $iconAsset = $assetPrefix . '/file-icons/' . View::publicIconAsset((string) $item['icon'], (string) $item['name']);
     $previewUrl = $imagePreviewUrl($item);
@@ -109,7 +112,7 @@ foreach ($result['items'] as $item) {
         : '<img class="browsebox-file-icon" src="' . View::h($iconAsset) . '" alt="">';
 
     $rows .= '<tr>'
-        . '<td><a class="text-decoration-none fw-semibold browsebox-public-row-link" href="' . View::h($hrefWithView) . '"' . $linkAttributes . '>'
+        . '<td><a class="text-decoration-none fw-semibold browsebox-public-row-link" href="' . View::h($href) . '"' . $linkAttributes . '>'
         . '<img class="browsebox-inline-file-icon" src="' . View::h($iconAsset) . '" alt=""> '
         . View::h($item['name'])
         . ($isDir ? '/' : '')
@@ -121,7 +124,7 @@ foreach ($result['items'] as $item) {
 
     $iconCards .= '
     <div class="browsebox-public-icon-cell">
-        <a class="browsebox-icon-card text-decoration-none" href="' . View::h($hrefWithView) . '"' . $linkAttributes . '>
+        <a class="browsebox-icon-card text-decoration-none" href="' . View::h($href) . '"' . $linkAttributes . '>
             <div class="browsebox-icon-card-preview">
                 ' . $overlayHtml . '
                 ' . $previewHtml . '
@@ -151,7 +154,7 @@ foreach ($result['breadcrumbs'] as $index => $crumb) {
     }
 
     $breadcrumbsHtml .= '<li class="breadcrumb-item"><a href="'
-        . View::h($withView(View::publicBreadcrumbHref($currentPath, $crumb['path'])))
+        . View::h(View::publicBreadcrumbHref($currentPath, $crumb['path']))
         . '">'
         . View::h($crumb['label'])
         . '</a></li>';
@@ -171,8 +174,8 @@ $body = '
                 <ol class="breadcrumb mb-0 browsebox-public-breadcrumb">' . $breadcrumbsHtml . '</ol>
             </nav>
             <div class="btn-group browsebox-view-toggle" role="group" aria-label="Public view mode">
-                <a class="btn btn-sm ' . View::h($listButtonClass) . '" href="?view=list">List View</a>
-                <a class="btn btn-sm ' . View::h($iconButtonClass) . '" href="?view=icons">Icon View</a>
+                <button class="btn btn-sm ' . View::h($listButtonClass) . '" type="button" data-public-view-toggle="list">List View</button>
+                <button class="btn btn-sm ' . View::h($iconButtonClass) . '" type="button" data-public-view-toggle="icons">Icon View</button>
             </div>
         </div>
         <div class="table-responsive browsebox-public-list' . $listViewClass . '">
@@ -193,4 +196,4 @@ $body = '
     </div>
 </div>';
 
-View::renderPage($appName, $body, 'public', $showNav);
+View::renderPage($appName, $body, 'public', $showNav, $navActionHtml);

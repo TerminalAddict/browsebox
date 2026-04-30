@@ -65,6 +65,16 @@ body.browsebox-body {
     padding-inline: 1rem;
 }
 
+.browsebox-nav-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.browsebox-nav-form .nav-link {
+    border: 0;
+    background: transparent;
+}
+
 .browsebox-nav .nav-link.active {
     background: #0b5ed7;
     box-shadow: 0 8px 18px rgba(11, 94, 215, 0.22);
@@ -386,12 +396,22 @@ details summary::-webkit-details-marker {
     margin: 0;
 }
 
-.browsebox-tree-node > summary {
-    list-style: none;
+.browsebox-tree-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
 }
 
-.browsebox-tree-node > summary::-webkit-details-marker {
-    display: none;
+.browsebox-tree-summary:focus-visible {
+    outline: 2px solid rgba(11, 94, 215, 0.42);
+    outline-offset: 2px;
+    border-radius: 0.35rem;
 }
 
 .browsebox-tree-toggle,
@@ -411,8 +431,12 @@ details summary::-webkit-details-marker {
     transition: transform 140ms ease;
 }
 
-.browsebox-tree-node[open] > .browsebox-tree-row .browsebox-tree-toggle::before {
+.browsebox-tree-row.is-open .browsebox-tree-toggle::before {
     transform: rotate(90deg);
+}
+
+.browsebox-tree-children[hidden] {
+    display: none !important;
 }
 
 .browsebox-tree-link {
