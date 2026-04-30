@@ -584,6 +584,10 @@ details summary::-webkit-details-marker {
     isolation: isolate;
 }
 
+.browsebox-current-pane {
+    overflow: hidden;
+}
+
 .browsebox-current-pane.is-sticky-enabled {
     position: sticky;
     top: 1rem;
