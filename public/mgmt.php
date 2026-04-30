@@ -427,10 +427,10 @@ foreach ($items as $item) {
         . '</form>';
 
     $rows .= '<tr' . $rowAttributes . '>'
-        . '<td>' . $nameHtml . '</td>'
-        . '<td>' . View::h(View::formatSize(is_int($item['size']) ? $item['size'] : null)) . '</td>'
-        . '<td>' . View::h(View::formatDate(is_int($item['modified']) ? $item['modified'] : null)) . '</td>'
-        . '<td class="text-end">
+        . '<td data-label="Name">' . $nameHtml . '</td>'
+        . '<td data-label="Size">' . View::h(View::formatSize(is_int($item['size']) ? $item['size'] : null)) . '</td>'
+        . '<td data-label="Modified">' . View::h(View::formatDate(is_int($item['modified']) ? $item['modified'] : null)) . '</td>'
+        . '<td class="text-end" data-label="Actions">
                 <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-rename-toggle>Rename</button>
                 <form method="post" class="d-inline" onsubmit="return BrowseBox.confirmDelete(this);">
                     <input type="hidden" name="action" value="delete">
@@ -639,7 +639,7 @@ $body = $alertHtml . '
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive browsebox-mgmt-list">
                     <table class="table table-hover align-middle mb-0">
                         <thead>
                             <tr>

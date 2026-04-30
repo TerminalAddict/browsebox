@@ -888,4 +888,89 @@ details summary::-webkit-details-marker {
     .browsebox-icon-card-preview {
         aspect-ratio: 1 / 1;
     }
+
+    .browsebox-mgmt-list {
+        overflow: visible;
+    }
+
+    .browsebox-mgmt-list table,
+    .browsebox-mgmt-list thead,
+    .browsebox-mgmt-list tbody,
+    .browsebox-mgmt-list tr,
+    .browsebox-mgmt-list th,
+    .browsebox-mgmt-list td {
+        display: block;
+        width: 100%;
+    }
+
+    .browsebox-mgmt-list thead {
+        display: none;
+    }
+
+    .browsebox-mgmt-list tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .browsebox-mgmt-list tr {
+        padding: 0.9rem 1rem;
+        border: 1px solid rgba(20, 61, 102, 0.1);
+        border-radius: 0.9rem;
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow: 0 8px 20px rgba(25, 62, 97, 0.06);
+        overflow: hidden;
+    }
+
+    .browsebox-mgmt-list td {
+        min-width: 0;
+        white-space: normal;
+        border: 0;
+        padding: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .browsebox-mgmt-list td + td {
+        margin-top: 0.4rem;
+        font-size: 0.92rem;
+        color: #4f647b;
+    }
+
+    .browsebox-mgmt-list td[data-label]::before {
+        content: attr(data-label);
+        display: inline-block;
+        min-width: 4.8rem;
+        margin-right: 0.55rem;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7a8ca1;
+    }
+
+    .browsebox-mgmt-list td[data-label="Name"]::before {
+        display: none;
+    }
+
+    .browsebox-mgmt-list td[data-label="Actions"] {
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid rgba(20, 61, 102, 0.08);
+        text-align: left !important;
+    }
+
+    .browsebox-mgmt-list td[data-label="Actions"]::before {
+        display: none;
+    }
+
+    .browsebox-mgmt-list td[data-label="Actions"] .btn {
+        margin-top: 0.2rem;
+    }
+
+    .browsebox-inline-rename {
+        align-items: stretch;
+    }
+
+    .browsebox-inline-rename .form-control {
+        min-width: 0;
+    }
 }
