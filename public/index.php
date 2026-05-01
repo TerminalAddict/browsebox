@@ -137,16 +137,16 @@ foreach ($result['items'] as $item) {
         ? '<img class="browsebox-file-preview" src="' . View::h($previewUrl) . '" alt="">'
         : '<img class="browsebox-file-icon" src="' . View::h($iconAsset) . '" alt="">';
 
-    $rows .= '<tr>'
-        . '<td><a class="text-decoration-none fw-semibold browsebox-public-row-link" href="' . View::h($href) . '"' . $linkAttributes . '>'
+    $rows .= '<tr data-sort-type-rank="' . View::h($isDir ? '0' : '1') . '" data-sort-name="' . View::h(strtolower((string) $item['name'])) . '" data-sort-size="' . View::h(is_int($item['size']) ? (string) $item['size'] : '-1') . '" data-sort-modified="' . View::h(is_int($item['modified']) ? (string) $item['modified'] : '0') . '">'
+        . '<td data-label="Name" data-sort-value="' . View::h(strtolower((string) $item['name'])) . '"><a class="text-decoration-none fw-semibold browsebox-public-row-link" href="' . View::h($href) . '"' . $linkAttributes . '>'
         . '<img class="browsebox-inline-file-icon" src="' . View::h($iconAsset) . '" alt=""> '
         . View::h($item['name'])
         . ($isDir ? '/' : '')
         . '</a>'
         . ($folderHintHtml !== '' ? '<div class="browsebox-public-row-flags">' . $folderHintHtml . '</div>' : '')
         . '</td>'
-        . '<td data-label="Size">' . View::h($sizeLabel) . '</td>'
-        . '<td data-label="Modified">' . View::h($modifiedLabel) . '</td>'
+        . '<td data-label="Size" data-sort-value="' . View::h(is_int($item['size']) ? (string) $item['size'] : '-1') . '">' . View::h($sizeLabel) . '</td>'
+        . '<td data-label="Modified" data-sort-value="' . View::h(is_int($item['modified']) ? (string) $item['modified'] : '0') . '">' . View::h($modifiedLabel) . '</td>'
         . '</tr>';
 
     if ($isDir) {
@@ -295,12 +295,12 @@ $body = '
             </div>
         </div>
         ' . ($searchQuery !== '' ? $searchMetaHtml . '<div class="browsebox-search-results">' . $searchResultsHtml . '</div>' : '<div class="table-responsive browsebox-public-list' . $listViewClass . '">
-            <table class="table table-hover align-middle mb-0">
+            <table class="table table-hover align-middle mb-0" data-sortable-table data-default-sort-key="name" data-default-sort-direction="asc">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Size</th>
-                        <th>Modified</th>
+                        <th aria-sort="none"><button class="browsebox-sort-button" type="button" data-sort-key="name">Name</button></th>
+                        <th aria-sort="none"><button class="browsebox-sort-button" type="button" data-sort-key="size">Size</button></th>
+                        <th aria-sort="none"><button class="browsebox-sort-button" type="button" data-sort-key="modified">Modified</button></th>
                     </tr>
                 </thead>
                 <tbody>' . $rows . '</tbody>

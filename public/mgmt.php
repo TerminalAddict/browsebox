@@ -599,10 +599,14 @@ foreach ($items as $item) {
         . '<button class="btn btn-sm btn-outline-secondary" type="button" data-rename-cancel>Cancel</button>'
         . '</form>';
 
-    $rows .= '<tr' . $rowAttributes . '>'
-        . '<td data-label="Name">' . $nameHtml . '</td>'
-        . '<td data-label="Size">' . View::h(View::formatSize(is_int($item['size']) ? $item['size'] : null)) . '</td>'
-        . '<td data-label="Modified">' . View::h(View::formatDate(is_int($item['modified']) ? $item['modified'] : null)) . '</td>'
+    $rows .= '<tr' . $rowAttributes
+        . ' data-sort-type-rank="' . View::h($item['type'] === 'dir' ? '0' : '1') . '"'
+        . ' data-sort-name="' . View::h(strtolower((string) $item['name'])) . '"'
+        . ' data-sort-size="' . View::h(is_int($item['size']) ? (string) $item['size'] : '-1') . '"'
+        . ' data-sort-modified="' . View::h(is_int($item['modified']) ? (string) $item['modified'] : '0') . '">'
+        . '<td data-label="Name" data-sort-value="' . View::h(strtolower((string) $item['name'])) . '">' . $nameHtml . '</td>'
+        . '<td data-label="Size" data-sort-value="' . View::h(is_int($item['size']) ? (string) $item['size'] : '-1') . '">' . View::h(View::formatSize(is_int($item['size']) ? $item['size'] : null)) . '</td>'
+        . '<td data-label="Modified" data-sort-value="' . View::h(is_int($item['modified']) ? (string) $item['modified'] : '0') . '">' . View::h(View::formatDate(is_int($item['modified']) ? $item['modified'] : null)) . '</td>'
         . '<td class="text-end" data-label="Actions">
                 <button class="btn btn-sm btn-outline-secondary browsebox-row-menu-button" type="button" aria-label="Open item menu" data-context-menu-button>
                     ⋯
@@ -857,12 +861,12 @@ $body = $alertHtml . '
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive browsebox-mgmt-list">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0" data-sortable-table data-default-sort-key="name" data-default-sort-direction="asc">
                         <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>Size</th>
-                                <th>Modified</th>
+                                <th aria-sort="none"><button class="browsebox-sort-button" type="button" data-sort-key="name">Name</button></th>
+                                <th aria-sort="none"><button class="browsebox-sort-button" type="button" data-sort-key="size">Size</button></th>
+                                <th aria-sort="none"><button class="browsebox-sort-button" type="button" data-sort-key="modified">Modified</button></th>
                                 <th class="text-end">Menu</th>
                             </tr>
                         </thead>

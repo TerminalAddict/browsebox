@@ -54,7 +54,7 @@ The script prompts for a password and stores a `password_hash()` value in [data/
 
 ## Storage
 
-Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). Generated image thumbnails are cached under [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails). The public browser supports both `List View` and `Icon View`, remembers the selected view in a persistent browser cookie, lists folders first, shows size and modified time, supports global search, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads, inline rendering, thumbnail responses, and on-demand ZIP archive downloads can be controlled safely. Normal folders expose their ZIP download action after you enter the folder, while folders detected as web apps expose a parent-level ZIP shortcut because opening them may hand control to the uploaded app.
+Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). Generated image thumbnails are cached under [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails). The public browser supports both `List View` and `Icon View`, remembers the selected view in a persistent browser cookie, lists folders first, shows size and modified time, supports global search, supports client-side sortable columns in `List View`, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads, inline rendering, thumbnail responses, and on-demand ZIP archive downloads can be controlled safely. Normal folders expose their ZIP download action after you enter the folder, while folders detected as web apps expose a parent-level ZIP shortcut because opening them may hand control to the uploaded app.
 
 `Icon View` uses local SVG file-type icons from [public/assets/file-icons](/home/paul/git-repos/BrowseBox/public/assets/file-icons). Raster image thumbnails are generated on demand and cached by file path plus file timestamp, so updated images automatically get a new thumbnail cache key. Thumbnail generation uses PHP GD when available; if GD is missing, image files fall back to their normal icon or inline image rendering.
 
@@ -97,6 +97,7 @@ The management portal at `/.mgmt` supports:
 - folder creation
 - moving files and folders with direct drag-and-drop onto visible folders, breadcrumbs, and the persistent folder tree
 - copying files and folders to another folder
+- sortable `Name`, `Size`, and `Modified` columns in the main content list
 - right-click item context menus in the main file list for rename, delete, move, copy, and download actions
 - right-click current-folder context menu support for creating a folder in the current directory
 - right-click folder-tree context menus for open, create sub folders, move, copy, and ZIP download actions

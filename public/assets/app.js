@@ -428,6 +428,127 @@ window.BrowseBox = {
         });
     },
 
+    initSortableTables() {
+        const tables = Array.from(document.querySelectorAll('[data-sortable-table]'));
+
+        tables.forEach((table) => {
+            if (!(table instanceof HTMLTableElement)) {
+                return;
+            }
+
+            const tbody = table.tBodies[0];
+            const headerButtons = Array.from(table.querySelectorAll('.browsebox-sort-button[data-sort-key]'));
+
+            if (!(tbody instanceof HTMLTableSectionElement) || headerButtons.length === 0) {
+                return;
+            }
+
+            const rows = Array.from(tbody.rows);
+
+            rows.forEach((row, index) => {
+                row.dataset.sortIndex = String(index);
+            });
+
+            const readSortValue = (row, key) => {
+                const directValue = row.dataset[`sort${key.charAt(0).toUpperCase()}${key.slice(1)}`];
+
+                if (typeof directValue === 'string' && directValue !== '') {
+                    return directValue;
+                }
+
+                const cell = row.querySelector(`[data-sort-value][data-label="${key === 'name' ? 'Name' : key === 'size' ? 'Size' : 'Modified'}"]`);
+
+                if (cell instanceof HTMLElement) {
+                    return cell.dataset.sortValue ?? '';
+                }
+
+                return '';
+            };
+
+            const updateHeaderState = (activeKey, direction) => {
+                headerButtons.forEach((button) => {
+                    const header = button.closest('th');
+                    const isActive = button.dataset.sortKey === activeKey;
+
+                    button.classList.toggle('is-active', isActive);
+                    button.dataset.sortDirection = isActive ? direction : '';
+
+                    if (header instanceof HTMLTableCellElement) {
+                        header.setAttribute('aria-sort', !isActive ? 'none' : (direction === 'asc' ? 'ascending' : 'descending'));
+                    }
+                });
+            };
+
+            const applySort = (key, direction) => {
+                const sortedRows = Array.from(tbody.rows).sort((rowA, rowB) => {
+                    const typeRankA = Number.parseInt(rowA.dataset.sortTypeRank ?? '0', 10);
+                    const typeRankB = Number.parseInt(rowB.dataset.sortTypeRank ?? '0', 10);
+
+                    if (typeRankA !== typeRankB) {
+                        return typeRankA - typeRankB;
+                    }
+
+                    const rawValueA = readSortValue(rowA, key);
+                    const rawValueB = readSortValue(rowB, key);
+                    const numericKey = key === 'size' || key === 'modified';
+
+                    let comparison = 0;
+
+                    if (numericKey) {
+                        comparison = Number.parseInt(rawValueA || '0', 10) - Number.parseInt(rawValueB || '0', 10);
+                    } else {
+                        comparison = rawValueA.localeCompare(rawValueB, undefined, { numeric: true, sensitivity: 'base' });
+                    }
+
+                    if (comparison === 0 && key !== 'name') {
+                        comparison = readSortValue(rowA, 'name').localeCompare(readSortValue(rowB, 'name'), undefined, { numeric: true, sensitivity: 'base' });
+                    }
+
+                    if (comparison === 0) {
+                        comparison = Number.parseInt(rowA.dataset.sortIndex ?? '0', 10) - Number.parseInt(rowB.dataset.sortIndex ?? '0', 10);
+                    }
+
+                    return direction === 'desc' ? comparison * -1 : comparison;
+                });
+
+                sortedRows.forEach((row) => {
+                    tbody.appendChild(row);
+                });
+
+                table.dataset.activeSortKey = key;
+                table.dataset.activeSortDirection = direction;
+                updateHeaderState(key, direction);
+            };
+
+            headerButtons.forEach((button) => {
+                if (!(button instanceof HTMLButtonElement)) {
+                    return;
+                }
+
+                button.addEventListener('click', () => {
+                    const key = button.dataset.sortKey;
+
+                    if (key !== 'name' && key !== 'size' && key !== 'modified') {
+                        return;
+                    }
+
+                    const currentKey = table.dataset.activeSortKey;
+                    const currentDirection = table.dataset.activeSortDirection === 'desc' ? 'desc' : 'asc';
+                    const nextDirection = currentKey === key && currentDirection === 'asc' ? 'desc' : 'asc';
+
+                    applySort(key, nextDirection);
+                });
+            });
+
+            const defaultKey = table.dataset.defaultSortKey;
+            const defaultDirection = table.dataset.defaultSortDirection === 'desc' ? 'desc' : 'asc';
+
+            if (defaultKey === 'name' || defaultKey === 'size' || defaultKey === 'modified') {
+                applySort(defaultKey, defaultDirection);
+            }
+        });
+    },
+
     initRenameUI() {
         const rows = Array.from(document.querySelectorAll('[data-rename-row]'));
 
@@ -1761,6 +1882,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.BrowseBox.initMoveUI();
     window.BrowseBox.initPublicViewToggle();
+    window.BrowseBox.initSortableTables();
     window.BrowseBox.initRenameUI();
     window.BrowseBox.initConditionalSticky();
     window.BrowseBox.initContextMenu();

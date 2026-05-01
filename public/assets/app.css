@@ -292,6 +292,48 @@ body.browsebox-body {
     min-width: 6.6rem;
 }
 
+.browsebox-sort-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #17324d;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.browsebox-sort-button::after {
+    content: "↕";
+    font-size: 0.72rem;
+    line-height: 1;
+    color: #8ba0b6;
+}
+
+.browsebox-sort-button.is-active::after {
+    color: #0b5ed7;
+}
+
+.browsebox-sort-button[data-sort-direction="asc"]::after {
+    content: "↑";
+}
+
+.browsebox-sort-button[data-sort-direction="desc"]::after {
+    content: "↓";
+}
+
+.browsebox-sort-button:hover,
+.browsebox-sort-button:focus-visible {
+    color: #0b5ed7;
+}
+
+.browsebox-sort-button:focus-visible {
+    outline: 2px solid rgba(11, 94, 215, 0.28);
+    outline-offset: 3px;
+    border-radius: 0.35rem;
+}
+
 .browsebox-current-folder-zip-link {
     display: inline-flex;
     flex-direction: column;
@@ -1205,6 +1247,10 @@ details summary::-webkit-details-marker {
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: #7a8ca1;
+    }
+
+    .browsebox-public-list td[data-label="Name"]::before {
+        display: none;
     }
 
     .browsebox-view-toggle {
