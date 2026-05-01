@@ -10,7 +10,7 @@ final class FileResponder
     ) {
     }
 
-    public function serve(string $relativePath, bool $forceDownload = false): never
+    public function serve(string $relativePath, bool $forceDownload = false, bool $forceSandbox = false): never
     {
         $relativePath = $this->pathGuard->normalizeRelativePath($relativePath, false);
         $fullPath = $this->pathGuard->resolve($relativePath, true);
@@ -48,9 +48,9 @@ final class FileResponder
         header('Content-Length: ' . (string) filesize($fullPath));
         header('X-Content-Type-Options: nosniff');
         header('Referrer-Policy: no-referrer');
-        header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . '; filename="' . addslashes(basename($fullPath)) . '"');
+        header('Content-Disposition: ' . $this->contentDispositionValue($inline ? 'inline' : 'attachment', basename($fullPath)));
 
-        if ($isInlineHtml && $sandboxPublicHtml) {
+        if ($isInlineHtml && ($sandboxPublicHtml || $forceSandbox)) {
             // Public HTML is intentionally supported, but it must not share a normal browser origin
             // with the management portal.
             header("Content-Security-Policy: sandbox allow-scripts allow-forms allow-downloads allow-modals");
@@ -102,7 +102,7 @@ final class FileResponder
             header('Content-Length: ' . (string) filesize($tempFile));
             header('X-Content-Type-Options: nosniff');
             header('Referrer-Policy: no-referrer');
-            header('Content-Disposition: attachment; filename="' . addslashes($archiveName) . '"');
+            header('Content-Disposition: ' . $this->contentDispositionValue('attachment', $archiveName));
 
             readfile($tempFile);
             exit;
@@ -115,6 +115,23 @@ final class FileResponder
                 @unlink($tempFile);
             }
         }
+    }
+
+    private function contentDispositionValue(string $disposition, string $filename): string
+    {
+        $fallback = preg_replace('/[^A-Za-z0-9._-]/', '_', $filename) ?? 'download';
+        $fallback = trim($fallback, '._-');
+
+        if ($fallback === '') {
+            $fallback = 'download';
+        }
+
+        return sprintf(
+            '%s; filename="%s"; filename*=UTF-8\'\'%s',
+            $disposition,
+            $fallback,
+            rawurlencode($filename)
+        );
     }
 
     private function detectMimeType(string $fullPath, string $extension): string

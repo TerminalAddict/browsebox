@@ -38,7 +38,7 @@ Then plain `make deploy` will work without embedding environment-specific values
 
 The deploy helper also normalizes permissions for [data](/home/paul/git-repos/BrowseBox/data), [storage/files](/home/paul/git-repos/BrowseBox/storage/files), and [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails) so the web server can rename, move, upload, delete managed content, write cached thumbnails, persist remember-login tokens consistently, and maintain the search index/cache. It sets the group to `www-data`, applies setgid to directories, and grants group write access recursively.
 
-Deploys also preserve the live server copy of [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php), [data/users.json](/home/paul/git-repos/BrowseBox/data/users.json), [data/remember_tokens.json](/home/paul/git-repos/BrowseBox/data/remember_tokens.json), [data/search-index.json](/home/paul/git-repos/BrowseBox/data/search-index.json), [data/search-cache](/home/paul/git-repos/BrowseBox/data/search-cache), and [data/logs/actions.log](/home/paul/git-repos/BrowseBox/data/logs/actions.log), so settings changed through `/.mgmt`, saved users, remember-login tokens, search data, and logs are not overwritten by `make deploy`. On a brand-new server, missing runtime files are created automatically.
+Deploys also preserve the live server copy of [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php), [data/users.json](/home/paul/git-repos/BrowseBox/data/users.json), [data/remember_tokens.json](/home/paul/git-repos/BrowseBox/data/remember_tokens.json), [data/search-index.json](/home/paul/git-repos/BrowseBox/data/search-index.json), [data/search-cache](/home/paul/git-repos/BrowseBox/data/search-cache), and [data/logs/actions.log](/home/paul/git-repos/BrowseBox/data/logs/actions.log), so settings changed through `/.mgmt`, saved users, remember-login tokens, search data, and logs are not overwritten by `make deploy`. On a brand-new server, missing runtime files are created automatically. Runtime JSON stores that BrowseBox mutates directly are written using temporary files plus replace, and the remember-token store plus pending-upload manifest are serialized with lock files to reduce corruption and lost-update races.
 
 Pending replacement uploads are also kept under `data/pending-uploads`, so a deploy does not throw away files that are waiting for explicit replace/cancel confirmation.
 
@@ -99,6 +99,7 @@ The management portal at `/.mgmt` supports:
 - copying files and folders to another folder
 - right-click item context menus in the main file list for rename, delete, move, copy, and download actions
 - right-click folder-tree context menus for open, move, copy, and ZIP download actions
+- modal confirmations for destructive actions such as delete
 - rename
 - delete
 - search index status and manual rebuild
@@ -221,6 +222,8 @@ Blocked upload extensions:
 HTML files are allowed to render publicly because BrowseBox is intended to host public content uploaded by the owner.
 
 Public HTML can optionally be served with a restrictive `Content-Security-Policy` sandbox so rendered projects do not share a normal browser origin with the management portal. This reduces the risk that uploaded HTML can interact with an authenticated `/.mgmt` session.
+
+Even when `sandbox_public_html` is disabled, BrowseBox now forces the sandbox back on for public HTML requests made while a management session is authenticated. This is a deliberate safety tradeoff: anonymous visitors can still use trusted uploaded web apps normally, but an authenticated admin session is not exposed to same-origin public HTML with unrestricted browser access.
 
 If a trusted HTML project needs normal browser features such as `sessionStorage`, `localStorage`, or same-origin `fetch`/XHR to sibling files, disable `sandbox_public_html` in the management configuration panel or in [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php). This restores normal browser behavior for public HTML at the cost of reduced isolation.
 

@@ -47,13 +47,13 @@ try {
         $resolvedPath = $pathGuard->resolve($normalizedPath, true);
 
         if (is_file($resolvedPath)) {
-            $fileResponder->serve($normalizedPath);
+            $fileResponder->serve($normalizedPath, false, $showNav);
         }
 
         $indexFile = $browser->directoryIndexFile($normalizedPath);
 
         if ($indexFile !== null) {
-            $fileResponder->serve($indexFile);
+            $fileResponder->serve($indexFile, false, $showNav);
         }
     }
 

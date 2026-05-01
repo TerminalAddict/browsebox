@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/Config.php';
+require_once dirname(__DIR__) . '/app/Auth.php';
 require_once dirname(__DIR__) . '/app/FileResponder.php';
 require_once dirname(__DIR__) . '/app/PathGuard.php';
 require_once dirname(__DIR__) . '/app/ThumbnailManager.php';
 
 $config = new Config(dirname(__DIR__) . '/config/config.php');
+$auth = new Auth($config);
 $pathGuard = new PathGuard($config->requireString('storage_root'));
 $requestedPath = (string) ($_GET['path'] ?? '');
 $thumbnailRequested = isset($_GET['thumbnail']) && $_GET['thumbnail'] === '1';
@@ -25,7 +27,7 @@ try {
         $fileResponder->serveDirectoryArchive($requestedPath);
     }
 
-    $fileResponder->serve($requestedPath, $forceDownloadRequested);
+    $fileResponder->serve($requestedPath, $forceDownloadRequested, $auth->check());
 } catch (RuntimeException $exception) {
     $notFound = in_array($exception->getMessage(), ['Not found', 'Path does not exist.'], true);
     http_response_code($notFound ? 404 : 500);

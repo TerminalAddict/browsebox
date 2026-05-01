@@ -9,11 +9,13 @@ final class Auth
     private string $rememberCookieName = 'browsebox_remember';
     private int $rememberLifetime = 2592000;
     private bool $https;
+    private string $rememberTokensLockFile;
 
     public function __construct(Config $config)
     {
         $this->usersFile = rtrim($config->requireString('data_root'), '/') . '/users.json';
         $this->rememberTokensFile = rtrim($config->requireString('data_root'), '/') . '/remember_tokens.json';
+        $this->rememberTokensLockFile = rtrim($config->requireString('data_root'), '/') . '/remember_tokens.lock';
         $this->https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (($_SERVER['SERVER_PORT'] ?? null) === '443');
         $this->startSession();
@@ -143,73 +145,85 @@ final class Auth
             return;
         }
 
-        $tokens = $this->loadRememberTokens();
-        $this->pruneExpiredTokens($tokens);
-        $matchIndex = null;
-        $matchToken = null;
+        $rememberedUsername = null;
 
-        foreach ($tokens['tokens'] as $index => $token) {
-            if (($token['selector'] ?? '') !== $selector) {
-                continue;
+        $this->withRememberTokensLock(function (array &$tokens) use ($selector, $validator, &$rememberedUsername): void {
+            $this->pruneExpiredTokens($tokens);
+            $matchIndex = null;
+            $matchToken = null;
+
+            foreach ($tokens['tokens'] as $index => $token) {
+                if (($token['selector'] ?? '') !== $selector) {
+                    continue;
+                }
+
+                $matchIndex = $index;
+                $matchToken = $token;
+                break;
             }
 
-            $matchIndex = $index;
-            $matchToken = $token;
-            break;
-        }
+            if (!is_int($matchIndex) || !is_array($matchToken)) {
+                return;
+            }
 
-        if (!is_int($matchIndex) || !is_array($matchToken)) {
-            $this->clearRememberCookie();
-            $this->saveRememberTokens($tokens);
-            return;
-        }
+            $expiresAt = $matchToken['expires_at'] ?? 0;
+            $tokenHash = $matchToken['token_hash'] ?? '';
+            $username = $matchToken['username'] ?? '';
 
-        $expiresAt = $matchToken['expires_at'] ?? 0;
-        $tokenHash = $matchToken['token_hash'] ?? '';
-        $username = $matchToken['username'] ?? '';
+            if (!is_int($expiresAt) || $expiresAt < time() || !is_string($tokenHash) || !is_string($username) || !$this->userExists($username)) {
+                unset($tokens['tokens'][$matchIndex]);
+                $tokens['tokens'] = array_values($tokens['tokens']);
+                return;
+            }
 
-        if (!is_int($expiresAt) || $expiresAt < time() || !is_string($tokenHash) || !is_string($username) || !$this->userExists($username)) {
-            unset($tokens['tokens'][$matchIndex]);
-            $tokens['tokens'] = array_values($tokens['tokens']);
-            $this->saveRememberTokens($tokens);
-            $this->clearRememberCookie();
-            return;
-        }
+            if (!hash_equals($tokenHash, hash('sha256', $validator))) {
+                unset($tokens['tokens'][$matchIndex]);
+                $tokens['tokens'] = array_values($tokens['tokens']);
+                return;
+            }
 
-        if (!hash_equals($tokenHash, hash('sha256', $validator))) {
-            unset($tokens['tokens'][$matchIndex]);
-            $tokens['tokens'] = array_values($tokens['tokens']);
-            $this->saveRememberTokens($tokens);
+            $rememberedUsername = $username;
+            $this->rotateRememberToken($tokens, $matchIndex, $username);
+        });
+
+        if ($rememberedUsername === null) {
             $this->clearRememberCookie();
             return;
         }
 
         session_regenerate_id(true);
-        $_SESSION['browsebox_user'] = $username;
-        $this->rotateRememberToken($tokens, $matchIndex, $username);
+        $_SESSION['browsebox_user'] = $rememberedUsername;
     }
 
     private function issueRememberToken(string $username): void
     {
-        $tokens = $this->loadRememberTokens();
-        $this->pruneExpiredTokens($tokens);
+        $selector = null;
+        $validator = null;
+        $expiresAt = null;
 
-        $selector = bin2hex(random_bytes(9));
-        $validator = bin2hex(random_bytes(32));
-        $expiresAt = time() + $this->rememberLifetime;
+        $this->withRememberTokensLock(function (array &$tokens) use ($username, &$selector, &$validator, &$expiresAt): void {
+            $this->pruneExpiredTokens($tokens);
 
-        $tokens['tokens'][] = [
-            'selector' => $selector,
-            'username' => $username,
-            'token_hash' => hash('sha256', $validator),
-            'expires_at' => $expiresAt,
-        ];
+            $selector = bin2hex(random_bytes(9));
+            $validator = bin2hex(random_bytes(32));
+            $expiresAt = time() + $this->rememberLifetime;
 
-        $this->saveRememberTokens($tokens);
+            $tokens['tokens'][] = [
+                'selector' => $selector,
+                'username' => $username,
+                'token_hash' => hash('sha256', $validator),
+                'expires_at' => $expiresAt,
+            ];
+        });
+
+        if (!is_string($selector) || !is_string($validator) || !is_int($expiresAt)) {
+            throw new RuntimeException('Unable to issue remember token.');
+        }
+
         $this->setRememberCookie($selector, $validator, $expiresAt);
     }
 
-    private function rotateRememberToken(array $tokens, int $index, string $username): void
+    private function rotateRememberToken(array &$tokens, int $index, string $username): void
     {
         unset($tokens['tokens'][$index]);
         $tokens['tokens'] = array_values($tokens['tokens']);
@@ -225,7 +239,6 @@ final class Auth
             'expires_at' => $expiresAt,
         ];
 
-        $this->saveRememberTokens($tokens);
         $this->setRememberCookie($selector, $validator, $expiresAt);
     }
 
@@ -237,12 +250,12 @@ final class Auth
             [$selector] = $this->parseRememberCookie($rawCookie);
 
             if ($selector !== null) {
-                $tokens = $this->loadRememberTokens();
-                $tokens['tokens'] = array_values(array_filter(
-                    $tokens['tokens'],
-                    static fn (array $token): bool => ($token['selector'] ?? '') !== $selector
-                ));
-                $this->saveRememberTokens($tokens);
+                $this->withRememberTokensLock(static function (array &$tokens) use ($selector): void {
+                    $tokens['tokens'] = array_values(array_filter(
+                        $tokens['tokens'],
+                        static fn (array $token): bool => ($token['selector'] ?? '') !== $selector
+                    ));
+                });
             }
         }
 
@@ -329,7 +342,14 @@ final class Auth
             throw new RuntimeException('Unable to encode remember tokens.');
         }
 
-        if (file_put_contents($this->rememberTokensFile, $json . PHP_EOL, LOCK_EX) === false) {
+        $tempFile = tempnam($directory, 'browsebox-remember-');
+
+        if ($tempFile === false) {
+            throw new RuntimeException('Unable to create temporary remember-token file.');
+        }
+
+        if (file_put_contents($tempFile, $json . PHP_EOL, LOCK_EX) === false || !rename($tempFile, $this->rememberTokensFile)) {
+            @unlink($tempFile);
             throw new RuntimeException('Unable to save remember tokens.');
         }
     }
@@ -352,5 +372,33 @@ final class Auth
         }
 
         return false;
+    }
+
+    private function withRememberTokensLock(callable $callback): void
+    {
+        $directory = dirname($this->rememberTokensLockFile);
+
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            throw new RuntimeException('Unable to create remember-token lock directory.');
+        }
+
+        $handle = fopen($this->rememberTokensLockFile, 'c+');
+
+        if ($handle === false) {
+            throw new RuntimeException('Unable to open remember-token lock.');
+        }
+
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                throw new RuntimeException('Unable to lock remember-token store.');
+            }
+
+            $tokens = $this->loadRememberTokens();
+            $callback($tokens);
+            $this->saveRememberTokens($tokens);
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 }

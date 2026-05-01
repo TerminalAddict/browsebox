@@ -88,5 +88,24 @@ if ($json === false) {
     exit(1);
 }
 
-file_put_contents($usersFile, $json . PHP_EOL, LOCK_EX);
+$usersDirectory = dirname($usersFile);
+
+if (!is_dir($usersDirectory) && !mkdir($usersDirectory, 0775, true) && !is_dir($usersDirectory)) {
+    fwrite(STDERR, "Unable to create users directory.\n");
+    exit(1);
+}
+
+$tempFile = tempnam($usersDirectory, 'browsebox-users-');
+
+if ($tempFile === false) {
+    fwrite(STDERR, "Unable to create temporary users file.\n");
+    exit(1);
+}
+
+if (file_put_contents($tempFile, $json . PHP_EOL, LOCK_EX) === false || !rename($tempFile, $usersFile)) {
+    @unlink($tempFile);
+    fwrite(STDERR, "Unable to save users file.\n");
+    exit(1);
+}
+
 fwrite(STDOUT, "Admin user saved to {$usersFile}\n");

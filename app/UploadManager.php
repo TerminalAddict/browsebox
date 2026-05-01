@@ -7,6 +7,7 @@ final class UploadManager
     private array $blockedExtensions;
     private string $pendingRoot;
     private string $manifestFile;
+    private string $manifestLockFile;
 
     public function __construct(
         private readonly PathGuard $pathGuard,
@@ -20,6 +21,7 @@ final class UploadManager
         $dataRoot = rtrim($config->requireString('data_root'), '/');
         $this->pendingRoot = $dataRoot . '/pending-uploads';
         $this->manifestFile = $this->pendingRoot . '/manifest.json';
+        $this->manifestLockFile = $this->pendingRoot . '/manifest.lock';
     }
 
     public function uploadMany(string $targetRelativePath, array $files): array
@@ -50,7 +52,6 @@ final class UploadManager
 
         $uploaded = [];
         $conflicts = [];
-        $manifest = null;
         $batchId = null;
 
         foreach ($normalizedFiles as $index => $file) {
@@ -82,9 +83,8 @@ final class UploadManager
             }
 
             if (file_exists($destinationPath)) {
-                $manifest ??= $this->loadManifest();
                 $batchId ??= bin2hex(random_bytes(8));
-                $staged = $this->stagePendingUpload($batchId, $targetRelativePath, $destinationRelativePath, $safeUploadPath, $tmpName, $manifest);
+                $staged = $this->stagePendingUpload($batchId, $targetRelativePath, $destinationRelativePath, $safeUploadPath, $tmpName);
                 $conflicts[] = $staged;
                 continue;
             }
@@ -94,10 +94,6 @@ final class UploadManager
             }
 
             $uploaded[] = $destinationRelativePath;
-        }
-
-        if ($manifest !== null) {
-            $this->saveManifest($manifest);
         }
 
         return [
@@ -146,54 +142,68 @@ final class UploadManager
 
     public function replacePendingConflict(string $batchId, string $itemId): string
     {
-        [$manifest, $item] = $this->getPendingItem($batchId, $itemId);
-        $destinationRelativePath = (string) ($item['destination_relative_path'] ?? '');
-        $destinationPath = $this->pathGuard->resolve($destinationRelativePath);
-        $stagedPath = $this->pendingRoot . '/' . ltrim((string) ($item['staged_relative_path'] ?? ''), '/');
-        $destinationDir = dirname($destinationPath);
+        $replacedPath = null;
 
-        if (!is_file($stagedPath)) {
+        $this->withManifestLock(function (array &$manifest) use ($batchId, $itemId, &$replacedPath): void {
+            $item = $this->getPendingItemFromManifest($manifest, $batchId, $itemId);
+            $destinationRelativePath = (string) ($item['destination_relative_path'] ?? '');
+            $destinationPath = $this->pathGuard->resolve($destinationRelativePath);
+            $stagedPath = $this->pendingRoot . '/' . ltrim((string) ($item['staged_relative_path'] ?? ''), '/');
+            $destinationDir = dirname($destinationPath);
+
+            if (!is_file($stagedPath)) {
+                $this->removePendingItem($manifest, $batchId, $itemId);
+                throw new RuntimeException('Pending upload file is missing.');
+            }
+
+            if (!is_dir($destinationDir) && !mkdir($destinationDir, 0775, true) && !is_dir($destinationDir)) {
+                throw new RuntimeException('Unable to prepare replacement directory.');
+            }
+
+            if (file_exists($destinationPath) && is_dir($destinationPath)) {
+                throw new RuntimeException('Cannot replace a folder with a file upload.');
+            }
+
+            if (file_exists($destinationPath) && !unlink($destinationPath)) {
+                throw new RuntimeException('Unable to replace existing file.');
+            }
+
+            if (!rename($stagedPath, $destinationPath)) {
+                throw new RuntimeException('Unable to move replacement file into place.');
+            }
+
             $this->removePendingItem($manifest, $batchId, $itemId);
-            $this->saveManifest($manifest);
-            throw new RuntimeException('Pending upload file is missing.');
+            $replacedPath = $destinationRelativePath;
+        });
+
+        if (!is_string($replacedPath)) {
+            throw new RuntimeException('Unable to replace pending upload.');
         }
 
-        if (!is_dir($destinationDir) && !mkdir($destinationDir, 0775, true) && !is_dir($destinationDir)) {
-            throw new RuntimeException('Unable to prepare replacement directory.');
-        }
-
-        if (file_exists($destinationPath) && is_dir($destinationPath)) {
-            throw new RuntimeException('Cannot replace a folder with a file upload.');
-        }
-
-        if (file_exists($destinationPath) && !unlink($destinationPath)) {
-            throw new RuntimeException('Unable to replace existing file.');
-        }
-
-        if (!rename($stagedPath, $destinationPath)) {
-            throw new RuntimeException('Unable to move replacement file into place.');
-        }
-
-        $this->removePendingItem($manifest, $batchId, $itemId);
-        $this->saveManifest($manifest);
-
-        return $destinationRelativePath;
+        return $replacedPath;
     }
 
     public function cancelPendingConflict(string $batchId, string $itemId): string
     {
-        [$manifest, $item] = $this->getPendingItem($batchId, $itemId);
-        $destinationRelativePath = (string) ($item['destination_relative_path'] ?? '');
-        $stagedPath = $this->pendingRoot . '/' . ltrim((string) ($item['staged_relative_path'] ?? ''), '/');
+        $cancelledPath = null;
 
-        if (is_file($stagedPath)) {
-            @unlink($stagedPath);
+        $this->withManifestLock(function (array &$manifest) use ($batchId, $itemId, &$cancelledPath): void {
+            $item = $this->getPendingItemFromManifest($manifest, $batchId, $itemId);
+            $cancelledPath = (string) ($item['destination_relative_path'] ?? '');
+            $stagedPath = $this->pendingRoot . '/' . ltrim((string) ($item['staged_relative_path'] ?? ''), '/');
+
+            if (is_file($stagedPath)) {
+                @unlink($stagedPath);
+            }
+
+            $this->removePendingItem($manifest, $batchId, $itemId);
+        });
+
+        if (!is_string($cancelledPath)) {
+            throw new RuntimeException('Unable to cancel pending upload.');
         }
 
-        $this->removePendingItem($manifest, $batchId, $itemId);
-        $this->saveManifest($manifest);
-
-        return $destinationRelativePath;
+        return $cancelledPath;
     }
 
     private function stagePendingUpload(
@@ -202,51 +212,66 @@ final class UploadManager
         string $destinationRelativePath,
         string $safeUploadPath,
         string $tmpName,
-        array &$manifest,
     ): array {
-        $this->ensurePendingRoot();
-        $itemId = bin2hex(random_bytes(8));
-        $batchDirectory = $this->pendingRoot . '/' . $batchId;
+        $staged = null;
 
-        if (!is_dir($batchDirectory) && !mkdir($batchDirectory, 0775, true) && !is_dir($batchDirectory)) {
-            throw new RuntimeException('Unable to create pending upload directory.');
-        }
+        $this->withManifestLock(function (array &$manifest) use (
+            $batchId,
+            $targetRelativePath,
+            $destinationRelativePath,
+            $safeUploadPath,
+            $tmpName,
+            &$staged,
+        ): void {
+            $this->ensurePendingRoot();
+            $itemId = bin2hex(random_bytes(8));
+            $batchDirectory = $this->pendingRoot . '/' . $batchId;
 
-        $stagedRelativePath = $batchId . '/' . $itemId . '.upload';
-        $stagedPath = $this->pendingRoot . '/' . $stagedRelativePath;
+            if (!is_dir($batchDirectory) && !mkdir($batchDirectory, 0775, true) && !is_dir($batchDirectory)) {
+                throw new RuntimeException('Unable to create pending upload directory.');
+            }
 
-        if (!move_uploaded_file($tmpName, $stagedPath)) {
+            $stagedRelativePath = $batchId . '/' . $itemId . '.upload';
+            $stagedPath = $this->pendingRoot . '/' . $stagedRelativePath;
+
+            if (!move_uploaded_file($tmpName, $stagedPath)) {
+                throw new RuntimeException('Unable to stage conflicting upload.');
+            }
+
+            $manifest['batches'][$batchId]['items'][$itemId] = [
+                'destination_relative_path' => $destinationRelativePath,
+                'relative_upload_path' => $safeUploadPath,
+                'upload_root_relative_path' => $targetRelativePath,
+                'staged_relative_path' => $stagedRelativePath,
+                'created_at' => date(DATE_ATOM),
+            ];
+
+            $staged = [
+                'batch_id' => $batchId,
+                'item_id' => $itemId,
+                'destination_relative_path' => $destinationRelativePath,
+                'relative_upload_path' => $safeUploadPath,
+            ];
+        });
+
+        if (!is_array($staged)) {
             throw new RuntimeException('Unable to stage conflicting upload.');
         }
 
-        $manifest['batches'][$batchId]['items'][$itemId] = [
-            'destination_relative_path' => $destinationRelativePath,
-            'relative_upload_path' => $safeUploadPath,
-            'upload_root_relative_path' => $targetRelativePath,
-            'staged_relative_path' => $stagedRelativePath,
-            'created_at' => date(DATE_ATOM),
-        ];
-
-        return [
-            'batch_id' => $batchId,
-            'item_id' => $itemId,
-            'destination_relative_path' => $destinationRelativePath,
-            'relative_upload_path' => $safeUploadPath,
-        ];
+        return $staged;
     }
 
-    private function getPendingItem(string $batchId, string $itemId): array
+    private function getPendingItemFromManifest(array $manifest, string $batchId, string $itemId): array
     {
         $this->assertPendingId($batchId);
         $this->assertPendingId($itemId);
-        $manifest = $this->loadManifest();
         $item = $manifest['batches'][$batchId]['items'][$itemId] ?? null;
 
         if (!is_array($item)) {
             throw new RuntimeException('Pending upload item was not found.');
         }
 
-        return [$manifest, $item];
+        return $item;
     }
 
     private function removePendingItem(array &$manifest, string $batchId, string $itemId): void
@@ -316,6 +341,29 @@ final class UploadManager
         if ($payload === false || file_put_contents($tempFile, $payload, LOCK_EX) === false || !rename($tempFile, $this->manifestFile)) {
             @unlink($tempFile);
             throw new RuntimeException('Unable to write pending upload manifest.');
+        }
+    }
+
+    private function withManifestLock(callable $callback): void
+    {
+        $this->ensurePendingRoot();
+        $handle = fopen($this->manifestLockFile, 'c+');
+
+        if ($handle === false) {
+            throw new RuntimeException('Unable to open pending-upload lock.');
+        }
+
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                throw new RuntimeException('Unable to lock pending-upload manifest.');
+            }
+
+            $manifest = $this->loadManifest();
+            $callback($manifest);
+            $this->saveManifest($manifest);
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
         }
     }
 
