@@ -2,3 +2,4 @@
 .DS_Store
 data/search-index.json
 data/search-cache/*.txt
+data/pending-uploads/

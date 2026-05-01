@@ -40,6 +40,8 @@ The deploy helper also normalizes permissions for [data](/home/paul/git-repos/Br
 
 Deploys also preserve the live server copy of [config/config.php](/home/paul/git-repos/BrowseBox/config/config.php), [data/users.json](/home/paul/git-repos/BrowseBox/data/users.json), [data/remember_tokens.json](/home/paul/git-repos/BrowseBox/data/remember_tokens.json), [data/search-index.json](/home/paul/git-repos/BrowseBox/data/search-index.json), [data/search-cache](/home/paul/git-repos/BrowseBox/data/search-cache), and [data/logs/actions.log](/home/paul/git-repos/BrowseBox/data/logs/actions.log), so settings changed through `/.mgmt`, saved users, remember-login tokens, search data, and logs are not overwritten by `make deploy`. On a brand-new server, missing runtime files are created automatically.
 
+Pending replacement uploads are also kept under `data/pending-uploads`, so a deploy does not throw away files that are waiting for explicit replace/cancel confirmation.
+
 ## Admin user
 
 Create an admin from the project root:
@@ -75,6 +77,7 @@ The management portal keeps the index in sync for normal actions such as:
 - create folder
 - rename
 - move
+- copy
 - delete
 
 If you add files directly on the server with `rsync`, `scp`, `sftp`, or SSH, BrowseBox cannot see that change immediately at the moment it happens. In that case, open `/.mgmt` and use the `Rebuild Search Index` button.
@@ -90,8 +93,11 @@ The management portal at `/.mgmt` supports:
 - file upload
 - folder upload with `webkitdirectory`
 - desktop drag-and-drop upload for files and folders in supported browsers
+- explicit replace/cancel workflow when an uploaded file name already exists
 - folder creation
 - moving files and folders with direct drag-and-drop onto visible folders, breadcrumbs, and the persistent folder tree
+- copying files and folders to another folder
+- right-click item context menus in the main file list for rename, delete, move, copy, and download actions
 - rename
 - delete
 - search index status and manual rebuild
@@ -135,6 +141,19 @@ If the file already exists somewhere on the server, move it directly over SSH in
 ssh user@example-host
 mv /some/other/path/bigfile.iso /path/to/browsebox/storage/files/
 ```
+
+## Replace existing files
+
+BrowseBox does not silently overwrite existing files during browser uploads.
+
+If an uploaded file name already exists:
+
+- non-conflicting files in the same upload continue normally
+- conflicting files are staged under `data/pending-uploads`
+- `/.mgmt` opens a `Pending Replacements` modal for that upload target
+- each conflicting file can then be explicitly replaced or cancelled
+
+This applies to both normal file uploads and folder uploads.
 
 ---
 

@@ -1,11 +1,73 @@
 window.BrowseBox = {
-    confirmDelete(form) {
-        return window.confirm('Delete this item?');
+    uploadInProgress: false,
+
+    getUploadInputs() {
+        return Array.from(document.querySelectorAll('input[type="file"][data-picker-kind]'));
+    },
+
+    getActiveUploadInput() {
+        return window.BrowseBox.getUploadInputs().find((input) => input.files && input.files.length > 0) ?? null;
+    },
+
+    getSelectedUploadItems() {
+        const activeInput = window.BrowseBox.getActiveUploadInput();
+        const dropPaths = document.querySelector('[data-dropped-relative-paths]');
+
+        if (!(activeInput instanceof HTMLInputElement) || !activeInput.files || activeInput.files.length === 0) {
+            return [];
+        }
+
+        const droppedPaths = dropPaths instanceof HTMLInputElement && dropPaths.value !== ''
+            ? JSON.parse(dropPaths.value)
+            : [];
+
+        return Array.from(activeInput.files).map((file, index) => {
+            const droppedPath = Array.isArray(droppedPaths) ? droppedPaths[index] : null;
+            const relativePath = typeof droppedPath === 'string' && droppedPath !== ''
+                ? droppedPath
+                : (typeof file.webkitRelativePath === 'string' && file.webkitRelativePath !== '' ? file.webkitRelativePath : file.name);
+
+            return {
+                name: file.name,
+                relativePath,
+                size: file.size,
+            };
+        });
+    },
+
+    clearUploadSelection() {
+        const fileInput = document.getElementById('file_upload');
+        const folderInput = document.getElementById('folder_upload');
+        const fileStatus = document.querySelector('[data-picker-status="file_upload"]');
+        const folderStatus = document.querySelector('[data-picker-status="folder_upload"]');
+
+        window.BrowseBox.clearFileInput(fileInput);
+        window.BrowseBox.clearFileInput(folderInput);
+        window.BrowseBox.clearDroppedMetadata();
+
+        if (fileInput instanceof HTMLInputElement) {
+            fileInput.dataset.pickerKind = 'file';
+        }
+
+        if (folderInput instanceof HTMLInputElement) {
+            folderInput.dataset.pickerKind = 'folder';
+        }
+
+        if (fileStatus instanceof HTMLElement) {
+            fileStatus.textContent = 'No file chosen';
+        }
+
+        if (folderStatus instanceof HTMLElement) {
+            folderStatus.textContent = 'No folder chosen';
+        }
+
+        window.BrowseBox.updateUploadState();
     },
 
     updateUploadState() {
-        const inputs = Array.from(document.querySelectorAll('input[type="file"][data-picker-kind]'));
+        const inputs = window.BrowseBox.getUploadInputs();
         const submit = document.querySelector('[data-upload-submit]');
+        const subtitle = document.querySelector('[data-upload-modal-subtitle]');
 
         if (!(submit instanceof HTMLButtonElement)) {
             return;
@@ -18,6 +80,10 @@ window.BrowseBox = {
         if (!activeInput) {
             submit.disabled = true;
             submit.textContent = 'Upload Selected Files or Folder';
+
+            if (subtitle instanceof HTMLElement) {
+                subtitle.textContent = 'Review the selected files before starting the upload.';
+            }
 
             if (dropzoneText instanceof HTMLElement) {
                 dropzoneText.textContent = 'Desktop drag and drop works here for files and folders.';
@@ -37,6 +103,10 @@ window.BrowseBox = {
         if (isFolder) {
             submit.textContent = 'Upload Selected Folder';
 
+            if (subtitle instanceof HTMLElement) {
+                subtitle.textContent = `Ready to upload folder contents (${activeInput.files.length} file${activeInput.files.length === 1 ? '' : 's'}).`;
+            }
+
             if (dropzoneText instanceof HTMLElement && dropped) {
                 dropzoneText.textContent = `Ready to upload folder contents (${activeInput.files.length} file${activeInput.files.length === 1 ? '' : 's'}). Click the upload button to continue.`;
             }
@@ -47,6 +117,12 @@ window.BrowseBox = {
         submit.textContent = activeInput.files.length === 1
             ? 'Upload Selected File'
             : 'Upload Selected Files';
+
+        if (subtitle instanceof HTMLElement) {
+            subtitle.textContent = activeInput.files.length === 1
+                ? 'Ready to upload the selected file.'
+                : `Ready to upload ${activeInput.files.length} selected files.`;
+        }
 
         if (dropzoneText instanceof HTMLElement && dropped) {
             dropzoneText.textContent = activeInput.files.length === 1
@@ -67,6 +143,22 @@ window.BrowseBox = {
         if (input instanceof HTMLInputElement) {
             input.value = '';
         }
+    },
+
+    isExternalUploadDrag(event) {
+        if (window.BrowseBox.moveDragItemPath) {
+            return false;
+        }
+
+        const dataTransfer = event.dataTransfer;
+
+        if (!dataTransfer) {
+            return false;
+        }
+
+        const types = Array.from(dataTransfer.types ?? []);
+
+        return types.includes('Files');
     },
 
     moveDragItemPath: null,
@@ -270,17 +362,44 @@ window.BrowseBox = {
         });
     },
 
-    submitMove(itemPath, destinationPath) {
-        const form = document.querySelector('[data-move-form]');
-        const itemInput = document.querySelector('[data-move-form-item-path]');
-        const destinationInput = document.querySelector('[data-move-form-destination-path]');
+    submitTransfer(action, itemPath, destinationPath) {
+        const form = document.querySelector('[data-transfer-form]');
+        const actionInput = document.querySelector('[data-transfer-form-action]');
+        const itemInput = document.querySelector('[data-transfer-form-item-path]');
+        const destinationInput = document.querySelector('[data-transfer-form-destination-path]');
 
-        if (!(form instanceof HTMLFormElement) || !(itemInput instanceof HTMLInputElement) || !(destinationInput instanceof HTMLInputElement)) {
+        if (
+            !(form instanceof HTMLFormElement)
+            || !(actionInput instanceof HTMLInputElement)
+            || !(itemInput instanceof HTMLInputElement)
+            || !(destinationInput instanceof HTMLInputElement)
+        ) {
+            return;
+        }
+
+        actionInput.value = action;
+        itemInput.value = itemPath;
+        destinationInput.value = destinationPath;
+        form.submit();
+    },
+
+    submitMove(itemPath, destinationPath) {
+        window.BrowseBox.submitTransfer('move', itemPath, destinationPath);
+    },
+
+    submitCopy(itemPath, destinationPath) {
+        window.BrowseBox.submitTransfer('copy', itemPath, destinationPath);
+    },
+
+    submitDelete(itemPath) {
+        const form = document.querySelector('[data-delete-form]');
+        const itemInput = document.querySelector('[data-delete-form-item-path]');
+
+        if (!(form instanceof HTMLFormElement) || !(itemInput instanceof HTMLInputElement)) {
             return;
         }
 
         itemInput.value = itemPath;
-        destinationInput.value = destinationPath;
         form.submit();
     },
 
@@ -375,6 +494,23 @@ window.BrowseBox = {
             }
         };
 
+        window.BrowseBox.openRenameRow = (rowOrPath) => {
+            if (rowOrPath instanceof HTMLElement) {
+                openRenameRow(rowOrPath);
+                return;
+            }
+
+            if (typeof rowOrPath !== 'string' || rowOrPath === '') {
+                return;
+            }
+
+            const row = document.querySelector(`[data-rename-row][data-item-path="${CSS.escape(rowOrPath)}"]`);
+
+            if (row instanceof HTMLElement) {
+                openRenameRow(row);
+            }
+        };
+
         document.addEventListener('click', (event) => {
             const target = event.target;
 
@@ -465,6 +601,798 @@ window.BrowseBox = {
         window.addEventListener('resize', update, { passive: true });
     },
 
+    initPendingConflictModal() {
+        const modal = document.querySelector('[data-pending-modal]');
+
+        if (!(modal instanceof HTMLDialogElement)) {
+            return;
+        }
+
+        const closeModal = () => {
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const closeButton = target.closest('[data-pending-modal-close]');
+
+            if (closeButton instanceof HTMLElement) {
+                event.preventDefault();
+                closeModal();
+            }
+        });
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+
+        if (modal.hasAttribute('data-pending-modal-autoshow')) {
+            modal.showModal();
+        }
+    },
+
+    initSettingsModal() {
+        const modal = document.querySelector('[data-settings-modal]');
+        const openButton = document.querySelector('[data-settings-modal-open]');
+
+        if (!(modal instanceof HTMLDialogElement) || !(openButton instanceof HTMLElement)) {
+            return;
+        }
+
+        const closeModal = () => {
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        openButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (!modal.open) {
+                modal.showModal();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const closeButton = target.closest('[data-settings-modal-close]');
+
+            if (closeButton instanceof HTMLElement) {
+                event.preventDefault();
+                closeModal();
+            }
+        });
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+    },
+
+    initContextMenu() {
+        const menu = document.querySelector('[data-context-menu]');
+
+        if (!(menu instanceof HTMLElement)) {
+            return;
+        }
+
+        let activeRow = null;
+        let activeItem = null;
+
+        const actions = {
+            rename: menu.querySelector('[data-context-action="rename"]'),
+            delete: menu.querySelector('[data-context-action="delete"]'),
+            move: menu.querySelector('[data-context-action="move"]'),
+            copy: menu.querySelector('[data-context-action="copy"]'),
+            download: menu.querySelector('[data-context-action="download"]'),
+            downloadZip: menu.querySelector('[data-context-action="download_zip"]'),
+        };
+
+        const hideMenu = () => {
+            if (activeRow instanceof HTMLElement) {
+                activeRow.classList.remove('is-context-active');
+            }
+
+            activeRow = null;
+            activeItem = null;
+            menu.hidden = true;
+            menu.classList.remove('is-visible');
+        };
+
+        const openLink = (href) => {
+            if (typeof href !== 'string' || href === '') {
+                return;
+            }
+
+            window.open(href, '_blank', 'noopener');
+        };
+
+        const itemFromRow = (row) => ({
+            path: row.dataset.itemPath ?? '',
+            parentPath: row.dataset.itemParentPath ?? '',
+            name: row.dataset.itemName ?? '',
+            type: row.dataset.itemType ?? 'file',
+            openUrl: row.dataset.itemOpenUrl ?? '',
+            downloadUrl: row.dataset.itemDownloadUrl ?? '',
+            downloadZipUrl: row.dataset.itemDownloadZipUrl ?? '',
+        });
+
+        const positionMenu = (clientX, clientY) => {
+            menu.hidden = false;
+            menu.classList.add('is-visible');
+
+            const menuRect = menu.getBoundingClientRect();
+            const maxLeft = Math.max(8, window.innerWidth - menuRect.width - 8);
+            const maxTop = Math.max(8, window.innerHeight - menuRect.height - 8);
+            const left = Math.min(clientX, maxLeft);
+            const top = Math.min(clientY, maxTop);
+
+            menu.style.left = `${left}px`;
+            menu.style.top = `${top}px`;
+        };
+
+        const updateMenuState = () => {
+            if (!activeItem) {
+                return;
+            }
+
+            if (actions.download instanceof HTMLButtonElement) {
+                actions.download.disabled = activeItem.downloadUrl === '';
+            }
+
+            if (actions.downloadZip instanceof HTMLButtonElement) {
+                actions.downloadZip.disabled = activeItem.downloadZipUrl === '';
+            }
+        };
+
+        const openMenu = (row, clientX, clientY) => {
+            hideMenu();
+            activeRow = row;
+            activeItem = itemFromRow(row);
+            row.classList.add('is-context-active');
+            updateMenuState();
+            positionMenu(clientX, clientY);
+        };
+
+        document.addEventListener('contextmenu', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            if (target.closest('[data-rename-form]')) {
+                return;
+            }
+
+            const row = target.closest('[data-context-row]');
+
+            if (!(row instanceof HTMLElement)) {
+                hideMenu();
+                return;
+            }
+
+            event.preventDefault();
+            openMenu(row, event.clientX, event.clientY);
+        });
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const menuButton = target.closest('[data-context-menu-button]');
+
+            if (menuButton instanceof HTMLElement) {
+                const row = menuButton.closest('[data-context-row]');
+
+                if (row instanceof HTMLElement) {
+                    event.preventDefault();
+                    const rect = menuButton.getBoundingClientRect();
+                    openMenu(row, rect.right - 6, rect.bottom + 6);
+                }
+
+                return;
+            }
+
+            const actionButton = target.closest('[data-context-action]');
+
+            if (!(actionButton instanceof HTMLButtonElement) || !activeItem) {
+                if (!target.closest('[data-context-menu]')) {
+                    hideMenu();
+                }
+
+                return;
+            }
+
+            event.preventDefault();
+            const action = actionButton.dataset.contextAction ?? '';
+            const item = activeItem;
+            hideMenu();
+
+            switch (action) {
+                case 'rename':
+                    window.BrowseBox.openRenameRow(item.path);
+                    break;
+                case 'delete':
+                    window.BrowseBox.openDeleteModal(item);
+                    break;
+                case 'move':
+                    window.BrowseBox.openDestinationModal('move', item);
+                    break;
+                case 'copy':
+                    window.BrowseBox.openDestinationModal('copy', item);
+                    break;
+                case 'download':
+                    openLink(item.downloadUrl);
+                    break;
+                case 'download_zip':
+                    openLink(item.downloadZipUrl);
+                    break;
+                default:
+                    break;
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                hideMenu();
+            }
+        });
+
+        window.addEventListener('resize', hideMenu, { passive: true });
+        window.addEventListener('scroll', hideMenu, { passive: true });
+    },
+
+    initDestinationModal() {
+        const modal = document.querySelector('[data-destination-modal]');
+        const title = document.querySelector('[data-destination-modal-title]');
+        const subtitle = document.querySelector('[data-destination-modal-subtitle]');
+        const itemLabel = document.querySelector('[data-destination-modal-item]');
+        const selection = document.querySelector('[data-destination-modal-selection]');
+        const error = document.querySelector('[data-destination-modal-error]');
+        const confirm = document.querySelector('[data-destination-modal-confirm]');
+
+        if (
+            !(modal instanceof HTMLDialogElement)
+            || !(title instanceof HTMLElement)
+            || !(subtitle instanceof HTMLElement)
+            || !(itemLabel instanceof HTMLElement)
+            || !(selection instanceof HTMLElement)
+            || !(confirm instanceof HTMLButtonElement)
+        ) {
+            return;
+        }
+
+        let pendingAction = '';
+        let pendingItem = null;
+        let selectedDestination = null;
+
+        const closeModal = () => {
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        const clearSelection = () => {
+            selectedDestination = null;
+            confirm.disabled = true;
+            confirm.textContent = 'Choose Destination';
+            selection.textContent = 'Choose a folder below.';
+            document.querySelectorAll('[data-destination-option].is-selected').forEach((option) => {
+                if (option instanceof HTMLElement) {
+                    option.classList.remove('is-selected');
+                }
+            });
+
+            if (error instanceof HTMLElement) {
+                error.classList.add('d-none');
+                error.textContent = '';
+            }
+        };
+
+        window.BrowseBox.openDestinationModal = (action, item) => {
+            pendingAction = action;
+            pendingItem = item;
+            clearSelection();
+
+            const verb = action === 'copy' ? 'Copy' : 'Move';
+            title.textContent = `${verb} To…`;
+            subtitle.textContent = `Browse to another folder, then confirm the ${action}.`;
+            itemLabel.textContent = `${item.name}${item.type === 'dir' ? '/' : ''}`;
+            confirm.textContent = action === 'copy' ? 'Copy To Selected Folder' : 'Move To Selected Folder';
+
+            if (!modal.open) {
+                modal.showModal();
+            }
+        };
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const closeButton = target.closest('[data-destination-modal-close]');
+
+            if (closeButton instanceof HTMLElement) {
+                event.preventDefault();
+                closeModal();
+                return;
+            }
+
+            const option = target.closest('[data-destination-option]');
+
+            if (!(option instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (!pendingItem) {
+                return;
+            }
+
+            document.querySelectorAll('[data-destination-option].is-selected').forEach((node) => {
+                if (node instanceof HTMLElement) {
+                    node.classList.remove('is-selected');
+                }
+            });
+
+            option.classList.add('is-selected');
+            selectedDestination = option.dataset.destinationOption ?? '';
+            const selectedLabel = option.dataset.destinationLabel ?? '/';
+            selection.textContent = selectedLabel;
+
+            const isSameFolder = selectedDestination === pendingItem.parentPath;
+            confirm.disabled = isSameFolder;
+
+            if (error instanceof HTMLElement) {
+                if (isSameFolder) {
+                    error.textContent = 'Choose a different folder.';
+                    error.classList.remove('d-none');
+                } else {
+                    error.classList.add('d-none');
+                    error.textContent = '';
+                }
+            }
+        });
+
+        confirm.addEventListener('click', (event) => {
+            event.preventDefault();
+
+            if (!pendingItem || selectedDestination === null || selectedDestination === pendingItem.parentPath) {
+                return;
+            }
+
+            closeModal();
+
+            if (pendingAction === 'copy') {
+                window.BrowseBox.submitCopy(pendingItem.path, selectedDestination);
+                return;
+            }
+
+            window.BrowseBox.submitMove(pendingItem.path, selectedDestination);
+        });
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+    },
+
+    initDeleteModal() {
+        const modal = document.querySelector('[data-delete-modal]');
+        const itemLabel = document.querySelector('[data-delete-modal-item-label]');
+        const confirm = document.querySelector('[data-delete-modal-confirm]');
+
+        if (!(modal instanceof HTMLDialogElement) || !(itemLabel instanceof HTMLElement) || !(confirm instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        let pendingItem = null;
+
+        const closeModal = () => {
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        window.BrowseBox.openDeleteModal = (item) => {
+            pendingItem = item;
+            itemLabel.textContent = `${item.name}${item.type === 'dir' ? '/' : ''}`;
+
+            if (!modal.open) {
+                modal.showModal();
+            }
+        };
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const closeButton = target.closest('[data-delete-modal-close]');
+
+            if (closeButton instanceof HTMLElement) {
+                event.preventDefault();
+                closeModal();
+            }
+        });
+
+        confirm.addEventListener('click', (event) => {
+            event.preventDefault();
+
+            if (!pendingItem) {
+                return;
+            }
+
+            closeModal();
+            window.BrowseBox.submitDelete(pendingItem.path);
+        });
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+    },
+
+    initTooltips() {
+        const triggers = Array.from(document.querySelectorAll('[data-browsebox-tooltip]'));
+
+        if (triggers.length === 0) {
+            return;
+        }
+
+        let activeTrigger = null;
+        let tooltip = null;
+
+        const removeTooltip = () => {
+            activeTrigger = null;
+
+            if (tooltip instanceof HTMLElement) {
+                tooltip.remove();
+            }
+
+            tooltip = null;
+        };
+
+        const positionTooltip = () => {
+            if (!(activeTrigger instanceof HTMLElement) || !(tooltip instanceof HTMLElement)) {
+                return;
+            }
+
+            const rect = activeTrigger.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const top = Math.max(8, rect.top + window.scrollY - tooltipRect.height - 10);
+            const left = Math.min(
+                window.scrollX + window.innerWidth - tooltipRect.width - 8,
+                Math.max(8, rect.left + window.scrollX + (rect.width / 2) - (tooltipRect.width / 2))
+            );
+
+            tooltip.style.top = `${top}px`;
+            tooltip.style.left = `${left}px`;
+        };
+
+        const showTooltip = (trigger) => {
+            const message = trigger.dataset.browseboxTooltip ?? '';
+
+            if (message === '') {
+                return;
+            }
+
+            removeTooltip();
+            activeTrigger = trigger;
+            tooltip = document.createElement('div');
+            tooltip.className = 'browsebox-tooltip';
+            tooltip.textContent = message;
+            document.body.appendChild(tooltip);
+            positionTooltip();
+        };
+
+        triggers.forEach((trigger) => {
+            if (!(trigger instanceof HTMLElement)) {
+                return;
+            }
+
+            trigger.addEventListener('mouseenter', () => showTooltip(trigger));
+            trigger.addEventListener('focus', () => showTooltip(trigger));
+            trigger.addEventListener('mouseleave', removeTooltip);
+            trigger.addEventListener('blur', removeTooltip);
+        });
+
+        window.addEventListener('scroll', positionTooltip, { passive: true });
+        window.addEventListener('resize', positionTooltip, { passive: true });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                removeTooltip();
+            }
+        });
+    },
+
+    initActionsModal() {
+        const modal = document.querySelector('[data-actions-modal]');
+        const openButton = document.querySelector('[data-actions-modal-open]');
+
+        if (!(modal instanceof HTMLDialogElement) || !(openButton instanceof HTMLElement)) {
+            return;
+        }
+
+        const closeModal = () => {
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        openButton.addEventListener('click', (event) => {
+            event.preventDefault();
+
+            if (!modal.open) {
+                modal.showModal();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const closeButton = target.closest('[data-actions-modal-close]');
+
+            if (closeButton instanceof HTMLElement) {
+                event.preventDefault();
+                closeModal();
+            }
+        });
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+    },
+
+    initUploadModal() {
+        const modal = document.querySelector('[data-upload-modal]');
+        const form = document.querySelector('[data-upload-form]');
+        const selection = document.querySelector('[data-upload-modal-selection]');
+        const error = document.querySelector('[data-upload-modal-error]');
+        const progress = document.querySelector('[data-upload-modal-progress]');
+        const submit = document.querySelector('[data-upload-submit]');
+        const cancel = document.querySelector('[data-upload-modal-cancel]');
+        const closeButtons = Array.from(document.querySelectorAll('[data-upload-modal-close]'));
+        const targetFrame = document.querySelector('[data-upload-target-frame]');
+
+        if (!(modal instanceof HTMLDialogElement) || !(form instanceof HTMLFormElement) || !(selection instanceof HTMLElement) || !(submit instanceof HTMLButtonElement) || !(targetFrame instanceof HTMLIFrameElement)) {
+            return;
+        }
+
+        const resetModalState = () => {
+            window.BrowseBox.uploadInProgress = false;
+
+            if (error instanceof HTMLElement) {
+                error.classList.add('d-none');
+                error.textContent = '';
+            }
+
+            if (progress instanceof HTMLElement) {
+                progress.classList.add('d-none');
+            }
+
+            submit.disabled = window.BrowseBox.getSelectedUploadItems().length === 0;
+
+            if (cancel instanceof HTMLButtonElement) {
+                cancel.disabled = false;
+            }
+
+            closeButtons.forEach((button) => {
+                if (button instanceof HTMLButtonElement || button instanceof HTMLElement) {
+                    button.removeAttribute('disabled');
+                }
+            });
+        };
+
+        const closeModal = () => {
+            if (window.BrowseBox.uploadInProgress) {
+                return;
+            }
+
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        const renderSelection = () => {
+            const items = window.BrowseBox.getSelectedUploadItems();
+
+            if (items.length === 0) {
+                selection.innerHTML = '<div class="text-secondary small">No files selected yet.</div>';
+                resetModalState();
+                return;
+            }
+
+            const html = items.map((item) => {
+                const size = typeof item.size === 'number' ? ` <span class="browsebox-upload-selection-size">(${window.BrowseBox.formatBytes(item.size)})</span>` : '';
+                return `<div class="browsebox-upload-selection-item"><span class="browsebox-upload-selection-path">${window.BrowseBox.escapeHtml(item.relativePath)}</span>${size}</div>`;
+            }).join('');
+
+            selection.innerHTML = `<div class="browsebox-upload-selection-list">${html}</div>`;
+            resetModalState();
+        };
+
+        window.BrowseBox.openUploadModal = () => {
+            const actionsModal = document.querySelector('[data-actions-modal]');
+            renderSelection();
+
+            if (window.BrowseBox.getSelectedUploadItems().length === 0) {
+                return;
+            }
+
+            if (actionsModal instanceof HTMLDialogElement && actionsModal.open) {
+                actionsModal.close();
+            }
+
+            if (!modal.open) {
+                modal.showModal();
+            }
+        };
+
+        window.BrowseBox.closeUploadModal = closeModal;
+
+        closeButtons.forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                closeModal();
+            });
+        });
+
+        if (cancel instanceof HTMLButtonElement) {
+            cancel.addEventListener('click', (event) => {
+                event.preventDefault();
+
+                if (window.BrowseBox.uploadInProgress) {
+                    return;
+                }
+
+                window.BrowseBox.clearUploadSelection();
+                closeModal();
+            });
+        }
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+
+            if (window.BrowseBox.uploadInProgress || window.BrowseBox.getSelectedUploadItems().length === 0) {
+                return;
+            }
+
+            renderSelection();
+            window.BrowseBox.uploadInProgress = true;
+
+            if (error instanceof HTMLElement) {
+                error.classList.add('d-none');
+                error.textContent = '';
+            }
+
+            if (progress instanceof HTMLElement) {
+                progress.classList.remove('d-none');
+            }
+
+            submit.disabled = true;
+            submit.textContent = 'Uploading...';
+
+            if (cancel instanceof HTMLButtonElement) {
+                cancel.disabled = true;
+            }
+
+            closeButtons.forEach((button) => {
+                if (button instanceof HTMLButtonElement || button instanceof HTMLElement) {
+                    button.setAttribute('disabled', 'disabled');
+                }
+            });
+
+            const handleFrameLoad = () => {
+                let nextLocation = '';
+
+                try {
+                    const frameWindow = targetFrame.contentWindow;
+                    nextLocation = frameWindow?.location?.href ?? '';
+                } catch (frameError) {
+                    nextLocation = '';
+                }
+
+                if (nextLocation === '' || nextLocation === 'about:blank') {
+                    return;
+                }
+
+                targetFrame.removeEventListener('load', handleFrameLoad);
+                targetFrame.removeEventListener('error', handleFrameError);
+                window.location.href = nextLocation;
+            };
+
+            const handleFrameError = () => {
+                window.BrowseBox.uploadInProgress = false;
+                targetFrame.removeEventListener('load', handleFrameLoad);
+                targetFrame.removeEventListener('error', handleFrameError);
+                window.BrowseBox.updateUploadState();
+
+                if (progress instanceof HTMLElement) {
+                    progress.classList.add('d-none');
+                }
+
+                if (error instanceof HTMLElement) {
+                    error.textContent = 'Upload failed before BrowseBox could finish the transfer.';
+                    error.classList.remove('d-none');
+                }
+
+                if (cancel instanceof HTMLButtonElement) {
+                    cancel.disabled = false;
+                }
+
+                closeButtons.forEach((button) => {
+                    if (button instanceof HTMLButtonElement || button instanceof HTMLElement) {
+                        button.removeAttribute('disabled');
+                    }
+                });
+            };
+
+            targetFrame.src = 'about:blank';
+            targetFrame.addEventListener('load', handleFrameLoad);
+            targetFrame.addEventListener('error', handleFrameError);
+            form.target = 'browsebox-upload-target';
+            form.submit();
+        });
+    },
+
+    formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes < 1024) {
+            return `${Math.max(0, Math.round(bytes))} B`;
+        }
+
+        const units = ['KB', 'MB', 'GB', 'TB'];
+        let value = bytes / 1024;
+        let unitIndex = 0;
+
+        while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex += 1;
+        }
+
+        return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+    },
+
+    escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    },
+
     async handleDrop(event) {
         event.preventDefault();
 
@@ -486,9 +1414,11 @@ window.BrowseBox = {
             return;
         }
 
-        const items = Array.from(event.dataTransfer?.items ?? []);
+        const dataTransfer = event.dataTransfer;
+        const items = Array.from(dataTransfer?.items ?? []);
+        const droppedFiles = Array.from(dataTransfer?.files ?? []);
 
-        if (items.length === 0) {
+        if (items.length === 0 && droppedFiles.length === 0) {
             return;
         }
 
@@ -535,21 +1465,36 @@ window.BrowseBox = {
             }
         };
 
-        for (const item of items) {
-            const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+        const entries = items
+            .map((item) => typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null)
+            .filter((entry) => entry);
 
-            if (entry) {
-                await readEntry(entry);
-                continue;
-            }
+        const containsDirectoryEntry = entries.some((entry) => entry.isDirectory);
 
-            const file = item.getAsFile ? item.getAsFile() : null;
-
-            if (file) {
+        if (!containsDirectoryEntry && droppedFiles.length > 0) {
+            for (const file of droppedFiles) {
                 collected.push({
                     file,
                     relativePath: file.name,
                 });
+            }
+        } else {
+            for (const item of items) {
+            const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+
+                if (entry) {
+                    await readEntry(entry);
+                    continue;
+                }
+
+                const file = item.getAsFile ? item.getAsFile() : null;
+
+                if (file) {
+                    collected.push({
+                        file,
+                        relativePath: file.name,
+                    });
+                }
             }
         }
 
@@ -579,6 +1524,7 @@ window.BrowseBox = {
 
         fileInput.dataset.pickerKind = hasDirectories ? 'folder' : 'file';
         window.BrowseBox.updateUploadState();
+        window.BrowseBox.openUploadModal?.();
     },
 };
 
@@ -624,6 +1570,7 @@ document.addEventListener('change', (event) => {
         const folderName = relativePath.includes('/') ? relativePath.split('/')[0] : firstFile.name;
         status.textContent = `${folderName} (${input.files.length} file${input.files.length === 1 ? '' : 's'})`;
         window.BrowseBox.updateUploadState();
+        window.BrowseBox.openUploadModal?.();
         return;
     }
 
@@ -632,35 +1579,69 @@ document.addEventListener('change', (event) => {
         : `${input.files.length} files selected`;
 
     window.BrowseBox.updateUploadState();
+    window.BrowseBox.openUploadModal?.();
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    const dropzone = document.querySelector('[data-upload-dropzone]');
+    const dropzones = Array.from(document.querySelectorAll('[data-upload-dropzone]'));
 
-    if (dropzone instanceof HTMLElement) {
+    dropzones.forEach((dropzone) => {
+        if (!(dropzone instanceof HTMLElement)) {
+            return;
+        }
+
         ['dragenter', 'dragover'].forEach((eventName) => {
             dropzone.addEventListener(eventName, (event) => {
+                if (!window.BrowseBox.isExternalUploadDrag(event)) {
+                    return;
+                }
+
                 event.preventDefault();
+
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = 'copy';
+                }
+
                 dropzone.classList.add('is-dragover');
             });
         });
 
         ['dragleave', 'dragend'].forEach((eventName) => {
-            dropzone.addEventListener(eventName, () => {
+            dropzone.addEventListener(eventName, (event) => {
+                if (eventName === 'dragleave') {
+                    const relatedTarget = event.relatedTarget;
+
+                    if (relatedTarget instanceof Node && dropzone.contains(relatedTarget)) {
+                        return;
+                    }
+                }
+
                 dropzone.classList.remove('is-dragover');
             });
         });
 
         dropzone.addEventListener('drop', (event) => {
+            if (!window.BrowseBox.isExternalUploadDrag(event)) {
+                return;
+            }
+
             window.BrowseBox.handleDrop(event).catch(() => {
                 dropzone.classList.remove('is-dragover');
             });
         });
-    }
+    });
 
     window.BrowseBox.initMoveUI();
     window.BrowseBox.initPublicViewToggle();
     window.BrowseBox.initRenameUI();
     window.BrowseBox.initConditionalSticky();
+    window.BrowseBox.initContextMenu();
+    window.BrowseBox.initDestinationModal();
+    window.BrowseBox.initDeleteModal();
+    window.BrowseBox.initTooltips();
+    window.BrowseBox.initActionsModal();
+    window.BrowseBox.initSettingsModal();
+    window.BrowseBox.initPendingConflictModal();
+    window.BrowseBox.initUploadModal();
     window.BrowseBox.updateUploadState();
 });

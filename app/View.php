@@ -182,6 +182,7 @@ HTML;
     {
         return match ($type) {
             'folder' => '📁',
+            'settings' => '⚙️',
             'archive' => '🗜️',
             'image' => '🖼️',
             'html' => '🌐',

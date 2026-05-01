@@ -12,6 +12,7 @@ $pathGuard = new PathGuard($config->requireString('storage_root'));
 $requestedPath = (string) ($_GET['path'] ?? '');
 $thumbnailRequested = isset($_GET['thumbnail']) && $_GET['thumbnail'] === '1';
 $zipRequested = isset($_GET['download']) && $_GET['download'] === 'zip';
+$forceDownloadRequested = isset($_GET['download']) && $_GET['download'] === '1';
 $fileResponder = new FileResponder($config, $pathGuard);
 $thumbnailManager = new ThumbnailManager($pathGuard);
 
@@ -24,7 +25,7 @@ try {
         $fileResponder->serveDirectoryArchive($requestedPath);
     }
 
-    $fileResponder->serve($requestedPath);
+    $fileResponder->serve($requestedPath, $forceDownloadRequested);
 } catch (RuntimeException $exception) {
     $notFound = in_array($exception->getMessage(), ['Not found', 'Path does not exist.'], true);
     http_response_code($notFound ? 404 : 500);

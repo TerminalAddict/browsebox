@@ -10,7 +10,7 @@ final class FileResponder
     ) {
     }
 
-    public function serve(string $relativePath): never
+    public function serve(string $relativePath, bool $forceDownload = false): never
     {
         $relativePath = $this->pathGuard->normalizeRelativePath($relativePath, false);
         $fullPath = $this->pathGuard->resolve($relativePath, true);
@@ -31,7 +31,7 @@ final class FileResponder
         );
         $allowHtmlRendering = (bool) $this->config->get('allow_html_rendering', false);
         $sandboxPublicHtml = (bool) $this->config->get('sandbox_public_html', false);
-        $inline = true;
+        $inline = !$forceDownload;
 
         if (in_array($extension, $forceDownloadExtensions, true) || in_array($extension, $blockedExtensions, true)) {
             $inline = false;

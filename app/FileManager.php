@@ -173,6 +173,46 @@ final class FileManager
         return $targetRelativePath;
     }
 
+    public function copy(string $relativePath, string $destinationDirectoryRelativePath): string
+    {
+        $sourceRelativePath = $this->pathGuard->normalizeRelativePath($relativePath, false);
+        $destinationDirectoryRelativePath = $this->pathGuard->normalizeRelativePath($destinationDirectoryRelativePath);
+
+        $sourcePath = $this->pathGuard->resolve($sourceRelativePath, true);
+        $destinationDirectoryPath = $this->pathGuard->resolve($destinationDirectoryRelativePath, true);
+
+        if (!is_dir($destinationDirectoryPath)) {
+            throw new RuntimeException('Copy destination is not a directory.');
+        }
+
+        $name = basename($sourceRelativePath);
+        $targetRelativePath = $destinationDirectoryRelativePath === ''
+            ? $name
+            : $destinationDirectoryRelativePath . '/' . $name;
+
+        if ($targetRelativePath === $sourceRelativePath) {
+            throw new RuntimeException('Item is already in that folder.');
+        }
+
+        if (is_dir($sourcePath) && str_starts_with($destinationDirectoryRelativePath . '/', $sourceRelativePath . '/')) {
+            throw new RuntimeException('Cannot copy a folder into itself.');
+        }
+
+        $targetPath = $this->pathGuard->resolve($targetRelativePath);
+
+        if (file_exists($targetPath)) {
+            throw new RuntimeException('Target already exists.');
+        }
+
+        if (is_dir($sourcePath)) {
+            $this->copyDirectory($sourcePath, $targetPath);
+        } elseif (!copy($sourcePath, $targetPath)) {
+            throw new RuntimeException('Unable to copy file.');
+        }
+
+        return $targetRelativePath;
+    }
+
     public function delete(string $relativePath): void
     {
         $fullPath = $this->pathGuard->resolve($relativePath, true);
@@ -223,6 +263,37 @@ final class FileManager
 
         if (!rmdir($directoryPath)) {
             throw new RuntimeException('Unable to delete folder.');
+        }
+    }
+
+    private function copyDirectory(string $sourceDirectoryPath, string $targetDirectoryPath): void
+    {
+        if (!mkdir($targetDirectoryPath, 0775, true) && !is_dir($targetDirectoryPath)) {
+            throw new RuntimeException('Unable to create copied folder.');
+        }
+
+        $entries = scandir($sourceDirectoryPath);
+
+        if ($entries === false) {
+            throw new RuntimeException('Unable to read folder for copy.');
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $sourceChildPath = $sourceDirectoryPath . '/' . $entry;
+            $targetChildPath = $targetDirectoryPath . '/' . $entry;
+
+            if (is_dir($sourceChildPath)) {
+                $this->copyDirectory($sourceChildPath, $targetChildPath);
+                continue;
+            }
+
+            if (!is_file($sourceChildPath) || !copy($sourceChildPath, $targetChildPath)) {
+                throw new RuntimeException('Unable to copy file.');
+            }
         }
     }
 
