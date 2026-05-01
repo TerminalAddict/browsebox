@@ -693,6 +693,8 @@ window.BrowseBox = {
 
         const actions = {
             open: menu.querySelector('[data-context-action="open"]'),
+            createFolder: menu.querySelector('[data-context-action="create_folder"]'),
+            createSubfolder: menu.querySelector('[data-context-action="create_subfolder"]'),
             rename: menu.querySelector('[data-context-action="rename"]'),
             delete: menu.querySelector('[data-context-action="delete"]'),
             move: menu.querySelector('[data-context-action="move"]'),
@@ -760,6 +762,7 @@ window.BrowseBox = {
             }
 
             const isTreeScope = activeItem.scope === 'tree';
+            const isCurrentScope = activeItem.scope === 'current';
             const isRoot = activeItem.path === '';
             const isDirectory = activeItem.type === 'dir';
 
@@ -771,6 +774,8 @@ window.BrowseBox = {
 
             setVisible(actions.open, true);
             setVisible(actions.openSeparator, !isTreeScope);
+            setVisible(actions.createFolder, isCurrentScope && isDirectory);
+            setVisible(actions.createSubfolder, isTreeScope && isDirectory);
             setVisible(actions.rename, !isTreeScope);
             setVisible(actions.delete, !isTreeScope);
             setVisible(actions.download, !isTreeScope);
@@ -866,6 +871,18 @@ window.BrowseBox = {
             switch (action) {
                 case 'open':
                     navigateTo(item.openUrl);
+                    break;
+                case 'create_folder':
+                    window.BrowseBox.openCreateSubfolderModal(item, {
+                        title: 'Create Folder',
+                        subtitle: 'Create a new folder in the current directory.',
+                    });
+                    break;
+                case 'create_subfolder':
+                    window.BrowseBox.openCreateSubfolderModal(item, {
+                        title: 'Create Sub Folder',
+                        subtitle: 'Create a new folder inside the selected parent folder.',
+                    });
                     break;
                 case 'rename':
                     window.BrowseBox.openRenameRow(item.path);
@@ -1088,6 +1105,75 @@ window.BrowseBox = {
 
             closeModal();
             window.BrowseBox.submitDelete(pendingItem.path);
+        });
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+    },
+
+    initCreateSubfolderModal() {
+        const modal = document.querySelector('[data-create-subfolder-modal]');
+        const parentLabel = document.querySelector('[data-create-subfolder-parent-label]');
+        const parentPath = document.querySelector('[data-create-subfolder-parent-path]');
+        const input = document.querySelector('[data-create-subfolder-input]');
+
+        if (
+            !(modal instanceof HTMLDialogElement)
+            || !(parentLabel instanceof HTMLElement)
+            || !(parentPath instanceof HTMLInputElement)
+            || !(input instanceof HTMLInputElement)
+        ) {
+            return;
+        }
+
+        const closeModal = () => {
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        const modalTitle = modal.querySelector('.browsebox-modal-header h3');
+        const modalSubtitle = modal.querySelector('.browsebox-modal-header .small');
+
+        window.BrowseBox.openCreateSubfolderModal = (item, options = {}) => {
+            const label = item.path === "" ? "/" : `/${item.path}`;
+            parentLabel.textContent = label;
+            parentPath.value = item.path;
+            input.value = "";
+
+            if (modalTitle instanceof HTMLElement && typeof options.title === 'string' && options.title !== '') {
+                modalTitle.textContent = options.title;
+            }
+
+            if (modalSubtitle instanceof HTMLElement && typeof options.subtitle === 'string' && options.subtitle !== '') {
+                modalSubtitle.textContent = options.subtitle;
+            }
+
+            if (!modal.open) {
+                modal.showModal();
+            }
+
+            window.setTimeout(() => {
+                input.focus();
+                input.select();
+            }, 0);
+        };
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const closeButton = target.closest('[data-create-subfolder-modal-close]');
+
+            if (closeButton instanceof HTMLElement) {
+                event.preventDefault();
+                closeModal();
+            }
         });
 
         modal.addEventListener('cancel', (event) => {
@@ -1680,6 +1766,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.BrowseBox.initContextMenu();
     window.BrowseBox.initDestinationModal();
     window.BrowseBox.initDeleteModal();
+    window.BrowseBox.initCreateSubfolderModal();
     window.BrowseBox.initTooltips();
     window.BrowseBox.initActionsModal();
     window.BrowseBox.initSettingsModal();

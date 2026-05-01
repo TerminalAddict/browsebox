@@ -618,6 +618,7 @@ if ($rows === '') {
 $publicPath = '../' . ($currentPath === '' ? '' : str_replace('%2F', '/', rawurlencode($currentPath)) . '/');
 $currentFolderLabel = $currentPath === '' ? 'Home' : basename($currentPath);
 $treeRootContextAttributes = browsebox_context_item_attributes('', 'Home', 'dir', '.mgmt', '', '', 'tree');
+$currentPaneContextAttributes = browsebox_context_item_attributes($currentPath, $currentFolderLabel, 'dir', '.mgmt' . ($currentPath === '' ? '' : '?path=' . rawurlencode($currentPath)), '', 'file.php?path=' . rawurlencode($currentPath) . '&download=zip', 'current');
 $treeHtml = '
 <div class="browsebox-tree-root-row browsebox-tree-row browsebox-move-target' . ($currentPath === '' ? ' is-current' : '') . '" data-move-target=""' . $treeRootContextAttributes . '>
     <span class="browsebox-tree-toggle-spacer" aria-hidden="true"></span>
@@ -845,7 +846,7 @@ $body = $alertHtml . '
         </div>' . $pendingConflictsHtml . '
     </div>
     <div class="col-lg-8">
-        <div class="card shadow-xl border-0 browsebox-current-pane" data-conditional-sticky data-upload-dropzone>
+        <div class="card shadow-xl border-0 browsebox-current-pane" data-conditional-sticky data-upload-dropzone' . $currentPaneContextAttributes . '>
             <div class="card-body border-bottom py-3">
                 <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
                     <div>
@@ -888,6 +889,8 @@ $body = $alertHtml . '
 <div class="browsebox-context-menu" data-context-menu hidden>
     <button class="browsebox-context-menu-item" type="button" data-context-action="open">Open</button>
     <div class="browsebox-context-menu-separator" role="separator" data-context-separator="open"></div>
+    <button class="browsebox-context-menu-item" type="button" data-context-action="create_folder">Create Folder</button>
+    <button class="browsebox-context-menu-item" type="button" data-context-action="create_subfolder">Create Sub Folder</button>
     <button class="browsebox-context-menu-item" type="button" data-context-action="rename">Rename</button>
     <button class="browsebox-context-menu-item" type="button" data-context-action="delete">Delete</button>
     <div class="browsebox-context-menu-separator" role="separator"></div>
@@ -973,6 +976,37 @@ $body = $alertHtml . '
         <div class="browsebox-modal-actions">
             <button class="btn btn-outline-secondary" type="button" data-destination-modal-close>Cancel</button>
             <button class="btn btn-primary" type="button" data-destination-modal-confirm disabled>Choose Destination</button>
+        </div>
+    </div>
+</dialog>
+<dialog class="browsebox-modal" data-create-subfolder-modal>
+    <form method="dialog" class="browsebox-modal-backdrop" data-create-subfolder-modal-close></form>
+    <div class="browsebox-modal-card">
+        <div class="browsebox-modal-header">
+            <div>
+                <h3 class="h5 mb-1">Create Sub Folder</h3>
+                <div class="small text-secondary">Create a new folder inside the selected parent folder.</div>
+            </div>
+            <button class="btn-close" type="button" aria-label="Close" data-create-subfolder-modal-close></button>
+        </div>
+        <div class="browsebox-modal-body">
+            <div class="browsebox-modal-field">
+                <div class="browsebox-modal-label">Parent Folder</div>
+                <div class="browsebox-modal-value" data-create-subfolder-parent-label>/</div>
+            </div>
+            <form method="post" id="browsebox_create_subfolder_form" data-create-subfolder-form>
+                <input type="hidden" name="action" value="mkdir">
+                <input type="hidden" name="path" value="" data-create-subfolder-parent-path>
+                ' . $csrf->input() . '
+                <div class="browsebox-modal-field">
+                    <label class="browsebox-modal-label" for="browsebox_subfolder_name">Folder Name</label>
+                    <input class="form-control" id="browsebox_subfolder_name" name="folder_name" placeholder="New folder name" required data-create-subfolder-input>
+                </div>
+            </form>
+        </div>
+        <div class="browsebox-modal-actions">
+            <button class="btn btn-outline-secondary" type="button" data-create-subfolder-modal-close>Cancel</button>
+            <button class="btn btn-primary" type="submit" form="browsebox_create_subfolder_form" data-create-subfolder-confirm>Create Folder</button>
         </div>
     </div>
 </dialog>
