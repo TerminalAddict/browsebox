@@ -98,6 +98,7 @@ The management portal at `/.mgmt` supports:
 - moving files and folders with direct drag-and-drop onto visible folders, breadcrumbs, and the persistent folder tree
 - copying files and folders to another folder
 - right-click item context menus in the main file list for rename, delete, move, copy, and download actions
+- right-click folder-tree context menus for open, move, copy, and ZIP download actions
 - rename
 - delete
 - search index status and manual rebuild

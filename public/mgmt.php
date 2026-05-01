@@ -188,6 +188,32 @@ function browsebox_tree_branch_open(string $nodePath, string $currentPath): bool
     return $currentPath === $nodePath || ($currentPath !== '' && str_starts_with($currentPath . '/', $nodePath . '/'));
 }
 
+function browsebox_context_item_attributes(
+    string $relativePath,
+    string $name,
+    string $type,
+    string $openUrl,
+    string $downloadUrl = '',
+    string $downloadZipUrl = '',
+    string $scope = 'list',
+): string {
+    $parentPath = '';
+
+    if ($relativePath !== '' && str_contains($relativePath, '/')) {
+        $parentPath = (string) dirname($relativePath);
+    }
+
+    return ' data-context-row="1"'
+        . ' data-context-scope="' . View::h($scope) . '"'
+        . ' data-item-path="' . View::h($relativePath) . '"'
+        . ' data-item-parent-path="' . View::h($parentPath) . '"'
+        . ' data-item-name="' . View::h($name) . '"'
+        . ' data-item-type="' . View::h($type) . '"'
+        . ' data-item-open-url="' . View::h($openUrl) . '"'
+        . ' data-item-download-url="' . View::h($downloadUrl) . '"'
+        . ' data-item-download-zip-url="' . View::h($downloadZipUrl) . '"';
+}
+
 function browsebox_render_tree_nodes(array $nodes, string $currentPath): string
 {
     if ($nodes === []) {
@@ -203,10 +229,19 @@ function browsebox_render_tree_nodes(array $nodes, string $currentPath): string
         $href = '.mgmt?path=' . rawurlencode($relativePath);
         $rowClass = 'browsebox-tree-row browsebox-move-target' . ($relativePath === $currentPath ? ' is-current' : '');
         $label = View::h(View::icon('folder')) . ' ' . View::h($name);
+        $contextAttributes = browsebox_context_item_attributes(
+            $relativePath,
+            $name,
+            'dir',
+            $href,
+            '',
+            'file.php?path=' . rawurlencode($relativePath) . '&download=zip',
+            'tree'
+        );
 
         if ($children === []) {
             $html .= '<li class="browsebox-tree-item">'
-                . '<div class="' . $rowClass . '" data-move-target="' . View::h($relativePath) . '">'
+                . '<div class="' . $rowClass . '" data-move-target="' . View::h($relativePath) . '"' . $contextAttributes . '>'
                 . '<span class="browsebox-tree-toggle-spacer" aria-hidden="true"></span>'
                 . '<a class="browsebox-tree-link" href="' . View::h($href) . '">' . $label . '</a>'
                 . '</div>'
@@ -219,7 +254,7 @@ function browsebox_render_tree_nodes(array $nodes, string $currentPath): string
         $childId = 'browsebox-tree-' . substr(sha1($relativePath), 0, 12);
 
         $html .= '<li class="browsebox-tree-item">'
-            . '<div class="' . $rowClass . $openClass . '" data-tree-item="' . View::h($relativePath) . '" data-move-target="' . View::h($relativePath) . '" data-move-expand="1">'
+            . '<div class="' . $rowClass . $openClass . '" data-tree-item="' . View::h($relativePath) . '" data-move-target="' . View::h($relativePath) . '" data-move-expand="1"' . $contextAttributes . '>'
             . '<button class="browsebox-tree-summary" type="button" aria-expanded="' . ($isOpen ? 'true' : 'false') . '" aria-controls="' . View::h($childId) . '" aria-label="Toggle ' . View::h($name) . '" data-tree-toggle>'
             . '<span class="browsebox-tree-toggle" aria-hidden="true"></span>'
             . '</button>'
@@ -534,14 +569,16 @@ foreach ($items as $item) {
     $downloadZipHref = $item['type'] === 'dir'
         ? 'file.php?path=' . rawurlencode($item['relative_path']) . '&download=zip'
         : '';
-    $rowAttributes = ' draggable="true" data-move-item="' . View::h($item['relative_path']) . '" data-rename-row="1" data-context-row="1"'
-        . ' data-item-path="' . View::h($item['relative_path']) . '"'
-        . ' data-item-parent-path="' . View::h($pathGuard->parent($item['relative_path'])) . '"'
-        . ' data-item-name="' . View::h($item['name']) . '"'
-        . ' data-item-type="' . View::h($item['type']) . '"'
-        . ' data-item-open-url="' . View::h($openHref) . '"'
-        . ' data-item-download-url="' . View::h($downloadHref) . '"'
-        . ' data-item-download-zip-url="' . View::h($downloadZipHref) . '"';
+    $rowAttributes = ' draggable="true" data-move-item="' . View::h($item['relative_path']) . '" data-rename-row="1"'
+        . browsebox_context_item_attributes(
+            (string) $item['relative_path'],
+            (string) $item['name'],
+            (string) $item['type'],
+            $openHref,
+            $downloadHref,
+            $downloadZipHref,
+            'list'
+        );
 
     if ($item['type'] === 'dir') {
         $rowAttributes .= ' data-move-target="' . View::h($item['relative_path']) . '" class="browsebox-move-target"';
@@ -580,8 +617,9 @@ if ($rows === '') {
 
 $publicPath = '../' . ($currentPath === '' ? '' : str_replace('%2F', '/', rawurlencode($currentPath)) . '/');
 $currentFolderLabel = $currentPath === '' ? 'Home' : basename($currentPath);
+$treeRootContextAttributes = browsebox_context_item_attributes('', 'Home', 'dir', '.mgmt', '', '', 'tree');
 $treeHtml = '
-<div class="browsebox-tree-root-row browsebox-tree-row browsebox-move-target' . ($currentPath === '' ? ' is-current' : '') . '" data-move-target="">
+<div class="browsebox-tree-root-row browsebox-tree-row browsebox-move-target' . ($currentPath === '' ? ' is-current' : '') . '" data-move-target=""' . $treeRootContextAttributes . '>
     <span class="browsebox-tree-toggle-spacer" aria-hidden="true"></span>
     <a class="browsebox-tree-link" href=".mgmt">' . View::h(View::icon('folder')) . ' Home</a>
 </div>'
@@ -848,6 +886,8 @@ $body = $alertHtml . '
     ' . $csrf->input() . '
 </form>
 <div class="browsebox-context-menu" data-context-menu hidden>
+    <button class="browsebox-context-menu-item" type="button" data-context-action="open">Open</button>
+    <div class="browsebox-context-menu-separator" role="separator" data-context-separator="open"></div>
     <button class="browsebox-context-menu-item" type="button" data-context-action="rename">Rename</button>
     <button class="browsebox-context-menu-item" type="button" data-context-action="delete">Delete</button>
     <div class="browsebox-context-menu-separator" role="separator"></div>

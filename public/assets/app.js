@@ -692,12 +692,14 @@ window.BrowseBox = {
         let activeItem = null;
 
         const actions = {
+            open: menu.querySelector('[data-context-action="open"]'),
             rename: menu.querySelector('[data-context-action="rename"]'),
             delete: menu.querySelector('[data-context-action="delete"]'),
             move: menu.querySelector('[data-context-action="move"]'),
             copy: menu.querySelector('[data-context-action="copy"]'),
             download: menu.querySelector('[data-context-action="download"]'),
             downloadZip: menu.querySelector('[data-context-action="download_zip"]'),
+            openSeparator: menu.querySelector('[data-context-separator="open"]'),
         };
 
         const hideMenu = () => {
@@ -719,7 +721,16 @@ window.BrowseBox = {
             window.open(href, '_blank', 'noopener');
         };
 
+        const navigateTo = (href) => {
+            if (typeof href !== 'string' || href === '') {
+                return;
+            }
+
+            window.location.href = href;
+        };
+
         const itemFromRow = (row) => ({
+            scope: row.dataset.contextScope ?? 'list',
             path: row.dataset.itemPath ?? '',
             parentPath: row.dataset.itemParentPath ?? '',
             name: row.dataset.itemName ?? '',
@@ -748,12 +759,40 @@ window.BrowseBox = {
                 return;
             }
 
+            const isTreeScope = activeItem.scope === 'tree';
+            const isRoot = activeItem.path === '';
+            const isDirectory = activeItem.type === 'dir';
+
+            const setVisible = (node, visible) => {
+                if (node instanceof HTMLElement) {
+                    node.hidden = !visible;
+                }
+            };
+
+            setVisible(actions.open, true);
+            setVisible(actions.openSeparator, !isTreeScope);
+            setVisible(actions.rename, !isTreeScope);
+            setVisible(actions.delete, !isTreeScope);
+            setVisible(actions.download, !isTreeScope);
+
             if (actions.download instanceof HTMLButtonElement) {
                 actions.download.disabled = activeItem.downloadUrl === '';
             }
 
             if (actions.downloadZip instanceof HTMLButtonElement) {
-                actions.downloadZip.disabled = activeItem.downloadZipUrl === '';
+                actions.downloadZip.disabled = activeItem.downloadZipUrl === '' || !isDirectory || isRoot;
+            }
+
+            if (actions.move instanceof HTMLButtonElement) {
+                actions.move.disabled = isRoot;
+            }
+
+            if (actions.copy instanceof HTMLButtonElement) {
+                actions.copy.disabled = isRoot;
+            }
+
+            if (actions.open instanceof HTMLButtonElement) {
+                actions.open.disabled = activeItem.openUrl === '';
             }
         };
 
@@ -825,6 +864,9 @@ window.BrowseBox = {
             hideMenu();
 
             switch (action) {
+                case 'open':
+                    navigateTo(item.openUrl);
+                    break;
                 case 'rename':
                     window.BrowseBox.openRenameRow(item.path);
                     break;
