@@ -46,6 +46,7 @@ final class FileManager
                 'modified' => filemtime($itemPath) ?: null,
                 'icon' => $isDir ? 'folder' : $this->iconForFile($entry),
                 'has_entrypoint' => $isDir ? $this->directoryHasEntrypoint($itemPath) : false,
+                'favicon_relative_path' => $isDir ? $this->directoryFaviconRelativePath($itemRelativePath, $itemPath) : null,
             ];
         }
 
@@ -321,5 +322,16 @@ final class FileManager
         }
 
         return false;
+    }
+
+    private function directoryFaviconRelativePath(string $directoryRelativePath, string $directoryPath): ?string
+    {
+        foreach (['favicon.ico', 'favicon.png', 'favicon.svg'] as $candidate) {
+            if (is_file($directoryPath . '/' . $candidate)) {
+                return $this->pathGuard->join($directoryRelativePath, $candidate);
+            }
+        }
+
+        return null;
     }
 }

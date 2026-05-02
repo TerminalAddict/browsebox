@@ -121,6 +121,10 @@ foreach ($result['items'] as $item) {
     $archiveIconAsset = $assetPrefix . '/file-icons/archive.svg';
     $previewUrl = $imagePreviewUrl($item);
     $hasEntrypoint = $isDir && (bool) ($item['has_entrypoint'] ?? false);
+    $faviconRelativePath = $isDir ? (string) ($item['favicon_relative_path'] ?? '') : '';
+    $faviconOverlayHtml = $faviconRelativePath !== ''
+        ? '<span class="browsebox-folder-favicon-overlay"><img src="' . View::h($fileHandlerPrefix . '?path=' . rawurlencode($faviconRelativePath)) . '" alt=""></span>'
+        : '';
     $sizeLabel = View::formatSize(is_int($item['size']) ? $item['size'] : null);
     $modifiedLabel = View::formatDate(is_int($item['modified']) ? $item['modified'] : null);
     $metaLabel = $isDir ? 'Folder' : $sizeLabel;
@@ -156,6 +160,7 @@ foreach ($result['items'] as $item) {
                 <a class="browsebox-icon-card-main text-decoration-none" href="' . View::h($href) . '">
                     <div class="browsebox-icon-card-preview">
                         ' . $overlayHtml . '
+                        ' . $faviconOverlayHtml . '
                         ' . $previewHtml . '
                     </div>
                     <div class="browsebox-icon-card-body">
