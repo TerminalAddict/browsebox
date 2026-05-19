@@ -6,6 +6,7 @@ final class FileManager
 {
     public function __construct(
         private readonly PathGuard $pathGuard,
+        private readonly ?FolderPasswordManager $folderPasswordManager = null,
     ) {
     }
 
@@ -47,6 +48,7 @@ final class FileManager
                 'icon' => $isDir ? 'folder' : $this->iconForFile($entry),
                 'has_entrypoint' => $isDir ? $this->directoryHasEntrypoint($itemPath) : false,
                 'favicon_relative_path' => $isDir ? $this->directoryFaviconRelativePath($itemRelativePath, $itemPath) : null,
+                'is_password_protected' => $isDir && $this->isPasswordProtectedDirectory($itemRelativePath),
             ];
         }
 
@@ -92,6 +94,7 @@ final class FileManager
             $directories[] = [
                 'name' => $entry,
                 'relative_path' => $itemRelativePath,
+                'is_password_protected' => $this->isPasswordProtectedDirectory($itemRelativePath),
                 'children' => $this->listDirectoryTree($itemRelativePath),
             ];
         }
@@ -333,5 +336,10 @@ final class FileManager
         }
 
         return null;
+    }
+
+    private function isPasswordProtectedDirectory(string $relativePath): bool
+    {
+        return $this->folderPasswordManager?->isFolderProtectedExact($relativePath) ?? false;
     }
 }

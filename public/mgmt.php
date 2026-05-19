@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/app/PathGuard.php';
 require_once dirname(__DIR__) . '/app/Auth.php';
 require_once dirname(__DIR__) . '/app/Csrf.php';
 require_once dirname(__DIR__) . '/app/FileManager.php';
+require_once dirname(__DIR__) . '/app/FolderPasswordManager.php';
 require_once dirname(__DIR__) . '/app/SearchIndex.php';
 require_once dirname(__DIR__) . '/app/UploadManager.php';
 require_once dirname(__DIR__) . '/app/View.php';
@@ -15,7 +16,8 @@ $config = new Config(dirname(__DIR__) . '/config/config.php');
 $pathGuard = new PathGuard($config->requireString('storage_root'));
 $auth = new Auth($config);
 $csrf = new Csrf();
-$fileManager = new FileManager($pathGuard);
+$folderPasswordManager = new FolderPasswordManager($pathGuard);
+$fileManager = new FileManager($pathGuard, $folderPasswordManager);
 $searchIndex = new SearchIndex($config, $pathGuard, $fileManager);
 $uploadManager = new UploadManager($pathGuard, $config);
 $navActionHtml = '';
@@ -196,6 +198,7 @@ function browsebox_context_item_attributes(
     string $downloadUrl = '',
     string $downloadZipUrl = '',
     string $scope = 'list',
+    bool $isProtected = false,
 ): string {
     $parentPath = '';
 
@@ -209,6 +212,7 @@ function browsebox_context_item_attributes(
         . ' data-item-parent-path="' . View::h($parentPath) . '"'
         . ' data-item-name="' . View::h($name) . '"'
         . ' data-item-type="' . View::h($type) . '"'
+        . ' data-item-protected="' . ($isProtected ? '1' : '0') . '"'
         . ' data-item-open-url="' . View::h($openUrl) . '"'
         . ' data-item-download-url="' . View::h($downloadUrl) . '"'
         . ' data-item-download-zip-url="' . View::h($downloadZipUrl) . '"';
@@ -228,7 +232,8 @@ function browsebox_render_tree_nodes(array $nodes, string $currentPath): string
         $children = is_array($node['children'] ?? null) ? $node['children'] : [];
         $href = '.mgmt?path=' . rawurlencode($relativePath);
         $rowClass = 'browsebox-tree-row browsebox-move-target' . ($relativePath === $currentPath ? ' is-current' : '');
-        $label = View::h(View::icon('folder')) . ' ' . View::h($name);
+        $label = View::h(View::icon('folder')) . ' ' . View::h($name)
+            . ((bool) ($node['is_password_protected'] ?? false) ? ' <span class="badge text-bg-warning align-middle ms-1">Protected</span>' : '');
         $contextAttributes = browsebox_context_item_attributes(
             $relativePath,
             $name,
@@ -236,7 +241,8 @@ function browsebox_render_tree_nodes(array $nodes, string $currentPath): string
             $href,
             '',
             'file.php?path=' . rawurlencode($relativePath) . '&download=zip',
-            'tree'
+            'tree',
+            (bool) ($node['is_password_protected'] ?? false)
         );
 
         if ($children === []) {
@@ -459,6 +465,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $config->write($updatedConfig);
                 browsebox_log_action($config, $user, 'config_update', 'config/config.php', 'success');
                 browsebox_redirect($currentPath, 'Configuration updated.');
+            case 'set_folder_password':
+                $folderPath = $pathGuard->normalizeRelativePath((string) ($_POST['folder_path'] ?? ''));
+                $folderPasswordManager->setPassword($folderPath, (string) ($_POST['folder_password'] ?? ''));
+                browsebox_log_action($config, $user, 'folder_password_set', $folderPath, 'success');
+                browsebox_redirect($folderPath, 'Folder password saved.');
+            case 'remove_folder_password':
+                $folderPath = $pathGuard->normalizeRelativePath((string) ($_POST['folder_path'] ?? ''));
+                $folderPasswordManager->removePassword($folderPath);
+                browsebox_log_action($config, $user, 'folder_password_remove', $folderPath, 'success');
+                browsebox_redirect($folderPath, 'Folder password removed.');
             default:
                 throw new RuntimeException('Unsupported action.');
         }
@@ -468,7 +484,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $config,
                 $auth->user(),
                 (string) ($_POST['action'] ?? 'unknown'),
-                (string) ($_POST['item_path'] ?? $_POST['path'] ?? ''),
+                (string) ($_POST['item_path'] ?? $_POST['folder_path'] ?? $_POST['path'] ?? ''),
                 'failure'
             );
         }
@@ -577,17 +593,23 @@ foreach ($items as $item) {
             $openHref,
             $downloadHref,
             $downloadZipHref,
-            'list'
+            'list',
+            (bool) ($item['is_password_protected'] ?? false)
         );
 
     if ($item['type'] === 'dir') {
         $rowAttributes .= ' data-move-target="' . View::h($item['relative_path']) . '" class="browsebox-move-target"';
     }
 
+    $protectionBadgeHtml = ($item['type'] === 'dir' && (bool) ($item['is_password_protected'] ?? false))
+        ? ' <span class="badge text-bg-warning align-middle ms-1">Protected</span>'
+        : '';
+
     $nameHtml = '<div class="browsebox-item-primary" data-rename-view>'
         . '<a class="text-decoration-none fw-semibold" href="' . View::h($openHref) . '">'
         . View::h(View::icon($item['icon'])) . ' ' . View::h($item['name']) . ($item['type'] === 'dir' ? '/' : '')
         . '</a>'
+        . $protectionBadgeHtml
         . '</div>'
         . '<form method="post" class="browsebox-inline-rename d-none" data-rename-form>'
         . '<input type="hidden" name="action" value="rename">'
@@ -621,12 +643,13 @@ if ($rows === '') {
 
 $publicPath = '../' . ($currentPath === '' ? '' : str_replace('%2F', '/', rawurlencode($currentPath)) . '/');
 $currentFolderLabel = $currentPath === '' ? 'Home' : basename($currentPath);
-$treeRootContextAttributes = browsebox_context_item_attributes('', 'Home', 'dir', '.mgmt', '', '', 'tree');
-$currentPaneContextAttributes = browsebox_context_item_attributes($currentPath, $currentFolderLabel, 'dir', '.mgmt' . ($currentPath === '' ? '' : '?path=' . rawurlencode($currentPath)), '', 'file.php?path=' . rawurlencode($currentPath) . '&download=zip', 'current');
+$currentFolderProtected = $folderPasswordManager->isFolderProtectedExact($currentPath);
+$treeRootContextAttributes = browsebox_context_item_attributes('', 'Home', 'dir', '.mgmt', '', '', 'tree', $folderPasswordManager->isFolderProtectedExact(''));
+$currentPaneContextAttributes = browsebox_context_item_attributes($currentPath, $currentFolderLabel, 'dir', '.mgmt' . ($currentPath === '' ? '' : '?path=' . rawurlencode($currentPath)), '', 'file.php?path=' . rawurlencode($currentPath) . '&download=zip', 'current', $folderPasswordManager->isFolderProtectedExact($currentPath));
 $treeHtml = '
 <div class="browsebox-tree-root-row browsebox-tree-row browsebox-move-target' . ($currentPath === '' ? ' is-current' : '') . '" data-move-target=""' . $treeRootContextAttributes . '>
     <span class="browsebox-tree-toggle-spacer" aria-hidden="true"></span>
-    <a class="browsebox-tree-link" href=".mgmt">' . View::h(View::icon('folder')) . ' Home</a>
+    <a class="browsebox-tree-link" href=".mgmt">' . View::h(View::icon('folder')) . ' Home' . ($folderPasswordManager->isFolderProtectedExact('') ? ' <span class="badge text-bg-warning align-middle ms-1">Protected</span>' : '') . '</a>
 </div>'
     . browsebox_render_tree_nodes($directoryTree, $currentPath);
 $destinationTreeHtml = '
@@ -854,7 +877,7 @@ $body = $alertHtml . '
             <div class="card-body border-bottom py-3">
                 <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
                     <div>
-                        <h3 class="h5 mb-1">' . View::h($currentFolderLabel) . '</h3>
+                        <h3 class="h5 mb-1">' . View::h($currentFolderLabel) . ($currentFolderProtected ? ' <span class="badge text-bg-warning align-middle ms-1">Protected</span>' : '') . '</h3>
                         <div class="small text-secondary">Drag items onto visible folder rows, the folder tree, or breadcrumbs to move them. You can also drop files or folders anywhere on this card to upload into this folder.</div>
                     </div>
                 </div>
@@ -895,6 +918,8 @@ $body = $alertHtml . '
     <div class="browsebox-context-menu-separator" role="separator" data-context-separator="open"></div>
     <button class="browsebox-context-menu-item" type="button" data-context-action="create_folder">Create Folder</button>
     <button class="browsebox-context-menu-item" type="button" data-context-action="create_subfolder">Create Sub Folder</button>
+    <button class="browsebox-context-menu-item" type="button" data-context-action="set_password">Set Folder Password…</button>
+    <button class="browsebox-context-menu-item" type="button" data-context-action="remove_password">Remove Folder Password</button>
     <button class="browsebox-context-menu-item" type="button" data-context-action="rename">Rename</button>
     <button class="browsebox-context-menu-item" type="button" data-context-action="delete">Delete</button>
     <div class="browsebox-context-menu-separator" role="separator"></div>
@@ -1011,6 +1036,39 @@ $body = $alertHtml . '
         <div class="browsebox-modal-actions">
             <button class="btn btn-outline-secondary" type="button" data-create-subfolder-modal-close>Cancel</button>
             <button class="btn btn-primary" type="submit" form="browsebox_create_subfolder_form" data-create-subfolder-confirm>Create Folder</button>
+        </div>
+    </div>
+</dialog>
+<dialog class="browsebox-modal" data-folder-password-modal>
+    <form method="dialog" class="browsebox-modal-backdrop" data-folder-password-modal-close></form>
+    <div class="browsebox-modal-card">
+        <div class="browsebox-modal-header">
+            <div>
+                <h3 class="h5 mb-1" data-folder-password-modal-title>Set Folder Password</h3>
+                <div class="small text-secondary" data-folder-password-modal-subtitle>Protect this folder and everything inside it with a password.</div>
+            </div>
+            <button class="btn-close" type="button" aria-label="Close" data-folder-password-modal-close></button>
+        </div>
+        <div class="browsebox-modal-body">
+            <div class="browsebox-modal-field">
+                <div class="browsebox-modal-label">Folder</div>
+                <div class="browsebox-modal-value" data-folder-password-modal-folder-label>/</div>
+            </div>
+            <form method="post" id="browsebox_folder_password_form" data-folder-password-form>
+                <input type="hidden" name="action" value="set_folder_password" data-folder-password-form-action>
+                <input type="hidden" name="folder_path" value="" data-folder-password-folder-path>
+                ' . $csrf->input() . '
+                <div class="browsebox-modal-field">
+                    <label class="browsebox-modal-label" for="browsebox_folder_password">Password</label>
+                    <input class="form-control" id="browsebox_folder_password" name="folder_password" type="password" placeholder="Folder password" required data-folder-password-input>
+                    <div class="form-text">BrowseBox stores a password hash in a hidden <code>.browsebox-password</code> file inside this folder.</div>
+                </div>
+            </form>
+        </div>
+        <div class="browsebox-modal-actions">
+            <button class="btn btn-outline-secondary" type="button" data-folder-password-modal-close>Cancel</button>
+            <button class="btn btn-outline-danger d-none" type="button" data-folder-password-remove>Remove Password</button>
+            <button class="btn btn-primary" type="submit" form="browsebox_folder_password_form" data-folder-password-confirm>Save Password</button>
         </div>
     </div>
 </dialog>

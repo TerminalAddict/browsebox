@@ -816,6 +816,8 @@ window.BrowseBox = {
             open: menu.querySelector('[data-context-action="open"]'),
             createFolder: menu.querySelector('[data-context-action="create_folder"]'),
             createSubfolder: menu.querySelector('[data-context-action="create_subfolder"]'),
+            setPassword: menu.querySelector('[data-context-action="set_password"]'),
+            removePassword: menu.querySelector('[data-context-action="remove_password"]'),
             rename: menu.querySelector('[data-context-action="rename"]'),
             delete: menu.querySelector('[data-context-action="delete"]'),
             move: menu.querySelector('[data-context-action="move"]'),
@@ -858,6 +860,7 @@ window.BrowseBox = {
             parentPath: row.dataset.itemParentPath ?? '',
             name: row.dataset.itemName ?? '',
             type: row.dataset.itemType ?? 'file',
+            isProtected: row.dataset.itemProtected === '1',
             openUrl: row.dataset.itemOpenUrl ?? '',
             downloadUrl: row.dataset.itemDownloadUrl ?? '',
             downloadZipUrl: row.dataset.itemDownloadZipUrl ?? '',
@@ -897,9 +900,15 @@ window.BrowseBox = {
             setVisible(actions.openSeparator, !isTreeScope);
             setVisible(actions.createFolder, isCurrentScope && isDirectory);
             setVisible(actions.createSubfolder, isTreeScope && isDirectory);
+            setVisible(actions.setPassword, isDirectory);
+            setVisible(actions.removePassword, isDirectory && activeItem.isProtected);
             setVisible(actions.rename, !isTreeScope);
             setVisible(actions.delete, !isTreeScope);
             setVisible(actions.download, !isTreeScope);
+
+            if (actions.setPassword instanceof HTMLButtonElement) {
+                actions.setPassword.textContent = activeItem.isProtected ? 'Change Folder Password…' : 'Set Folder Password…';
+            }
 
             if (actions.download instanceof HTMLButtonElement) {
                 actions.download.disabled = activeItem.downloadUrl === '';
@@ -1004,6 +1013,12 @@ window.BrowseBox = {
                         title: 'Create Sub Folder',
                         subtitle: 'Create a new folder inside the selected parent folder.',
                     });
+                    break;
+                case 'set_password':
+                    window.BrowseBox.openFolderPasswordModal(item);
+                    break;
+                case 'remove_password':
+                    window.BrowseBox.openFolderPasswordModal(item);
                     break;
                 case 'rename':
                     window.BrowseBox.openRenameRow(item.path);
@@ -1294,6 +1309,107 @@ window.BrowseBox = {
             if (closeButton instanceof HTMLElement) {
                 event.preventDefault();
                 closeModal();
+            }
+        });
+
+        modal.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            closeModal();
+        });
+    },
+
+    initFolderPasswordModal() {
+        const modal = document.querySelector('[data-folder-password-modal]');
+        const title = document.querySelector('[data-folder-password-modal-title]');
+        const subtitle = document.querySelector('[data-folder-password-modal-subtitle]');
+        const folderLabel = document.querySelector('[data-folder-password-modal-folder-label]');
+        const form = document.querySelector('[data-folder-password-form]');
+        const actionInput = document.querySelector('[data-folder-password-form-action]');
+        const folderPathInput = document.querySelector('[data-folder-password-folder-path]');
+        const passwordInput = document.querySelector('[data-folder-password-input]');
+        const confirmButton = document.querySelector('[data-folder-password-confirm]');
+        const removeButton = document.querySelector('[data-folder-password-remove]');
+
+        if (
+            !(modal instanceof HTMLDialogElement)
+            || !(title instanceof HTMLElement)
+            || !(subtitle instanceof HTMLElement)
+            || !(folderLabel instanceof HTMLElement)
+            || !(form instanceof HTMLFormElement)
+            || !(actionInput instanceof HTMLInputElement)
+            || !(folderPathInput instanceof HTMLInputElement)
+            || !(passwordInput instanceof HTMLInputElement)
+            || !(confirmButton instanceof HTMLButtonElement)
+            || !(removeButton instanceof HTMLButtonElement)
+        ) {
+            return;
+        }
+
+        let pendingItem = null;
+
+        const closeModal = () => {
+            if (modal.open) {
+                modal.close();
+            }
+        };
+
+        window.BrowseBox.openFolderPasswordModal = (item) => {
+            pendingItem = item;
+            const label = item.path === '' ? '/' : `/${item.path}`;
+
+            folderLabel.textContent = label;
+            folderPathInput.value = item.path;
+            passwordInput.value = '';
+            passwordInput.required = true;
+            actionInput.value = 'set_folder_password';
+            title.textContent = item.isProtected ? 'Change Folder Password' : 'Set Folder Password';
+            subtitle.textContent = item.isProtected
+                ? 'Enter a new password for this protected folder.'
+                : 'Protect this folder and everything inside it with a password.';
+            confirmButton.textContent = item.isProtected ? 'Save New Password' : 'Save Password';
+            removeButton.classList.toggle('d-none', !item.isProtected);
+
+            if (!modal.open) {
+                modal.showModal();
+            }
+
+            window.setTimeout(() => {
+                passwordInput.focus();
+                passwordInput.select();
+            }, 0);
+        };
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const closeButton = target.closest('[data-folder-password-modal-close]');
+
+            if (closeButton instanceof HTMLElement) {
+                event.preventDefault();
+                closeModal();
+                return;
+            }
+
+            const removeTrigger = target.closest('[data-folder-password-remove]');
+
+            if (!(removeTrigger instanceof HTMLButtonElement) || !pendingItem) {
+                return;
+            }
+
+            event.preventDefault();
+            actionInput.value = 'remove_folder_password';
+            passwordInput.required = false;
+            form.requestSubmit();
+        });
+
+        form.addEventListener('submit', () => {
+            if (actionInput.value !== 'remove_folder_password') {
+                actionInput.value = 'set_folder_password';
+                passwordInput.required = true;
             }
         });
 
@@ -1889,6 +2005,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.BrowseBox.initDestinationModal();
     window.BrowseBox.initDeleteModal();
     window.BrowseBox.initCreateSubfolderModal();
+    window.BrowseBox.initFolderPasswordModal();
     window.BrowseBox.initTooltips();
     window.BrowseBox.initActionsModal();
     window.BrowseBox.initSettingsModal();

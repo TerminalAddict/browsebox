@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/app/Config.php';
 require_once dirname(__DIR__) . '/app/Auth.php';
 require_once dirname(__DIR__) . '/app/Csrf.php';
 require_once dirname(__DIR__) . '/app/FileResponder.php';
+require_once dirname(__DIR__) . '/app/FolderPasswordManager.php';
 require_once dirname(__DIR__) . '/app/PathGuard.php';
 require_once dirname(__DIR__) . '/app/FileManager.php';
 require_once dirname(__DIR__) . '/app/PublicBrowser.php';
@@ -13,11 +14,68 @@ require_once dirname(__DIR__) . '/app/SearchIndex.php';
 require_once dirname(__DIR__) . '/app/ThumbnailManager.php';
 require_once dirname(__DIR__) . '/app/View.php';
 
+function browsebox_public_url(string $relativePath, bool $isDirectory, string $searchQuery = ''): string
+{
+    $href = $isDirectory
+        ? './'
+        : rawurlencode((string) basename($relativePath));
+
+    if ($searchQuery !== '') {
+        $href .= ($href === './' ? '?' : '?') . http_build_query(['q' => $searchQuery]);
+    }
+
+    return $href;
+}
+
+function browsebox_render_public_unlock_prompt(
+    string $appName,
+    Csrf $csrf,
+    string $requestedPath,
+    bool $isDirectory,
+    string $searchQuery,
+    string $protectedRoot,
+    bool $showNav,
+    string $navActionHtml,
+    ?string $message = null
+): never {
+    $folderLabel = $protectedRoot === '' ? '/' : '/' . $protectedRoot;
+    $body = ($message !== null ? '<div class="alert alert-danger">' . View::h($message) . '</div>' : '')
+        . '<div class="row justify-content-center">'
+        . '<div class="col-md-7 col-lg-6">'
+        . '<div class="card shadow-sm border-0">'
+        . '<div class="card-body p-4">'
+        . '<h2 class="h4 mb-2">Password Protected Folder</h2>'
+        . '<p class="text-secondary mb-4">Enter the folder password to access <strong>' . View::h($folderLabel) . '</strong>.</p>'
+        . '<form method="post">'
+        . '<input type="hidden" name="action" value="unlock_folder">'
+        . '<input type="hidden" name="requested_path" value="' . View::h($requestedPath) . '">'
+        . '<input type="hidden" name="requested_kind" value="' . ($isDirectory ? 'dir' : 'file') . '">'
+        . '<input type="hidden" name="q" value="' . View::h($searchQuery) . '">'
+        . $csrf->input()
+        . '<div class="mb-3">'
+        . '<label class="form-label" for="folder_password">Folder Password</label>'
+        . '<input class="form-control" id="folder_password" name="folder_password" type="password" autocomplete="current-password" required autofocus>'
+        . '</div>'
+        . '<div class="d-flex flex-wrap gap-2">'
+        . '<button class="btn btn-primary" type="submit">Open Folder</button>'
+        . '<a class="btn btn-outline-secondary" href="./">Back to Home</a>'
+        . '</div>'
+        . '</form>'
+        . '</div>'
+        . '</div>'
+        . '</div>'
+        . '</div>';
+
+    View::renderPage($appName, $body, 'public', $showNav, $navActionHtml);
+    exit;
+}
+
 $config = new Config(dirname(__DIR__) . '/config/config.php');
 $auth = new Auth($config);
 $csrf = new Csrf();
 $pathGuard = new PathGuard($config->requireString('storage_root'));
-$fileManager = new FileManager($pathGuard);
+$folderPasswordManager = new FolderPasswordManager($pathGuard);
+$fileManager = new FileManager($pathGuard, $folderPasswordManager);
 $browser = new PublicBrowser($fileManager, $pathGuard, $config);
 $fileResponder = new FileResponder($config, $pathGuard);
 $searchIndex = new SearchIndex($config, $pathGuard, $fileManager);
@@ -40,20 +98,88 @@ $searchQuery = trim((string) ($_GET['q'] ?? ''));
 $requestedViewMode = (string) ($_COOKIE[$viewCookieName] ?? 'list');
 $viewMode = in_array($requestedViewMode, ['list', 'icons'], true) ? $requestedViewMode : 'list';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'unlock_folder') {
+    try {
+        $csrf->requireValid($_POST['csrf_token'] ?? null);
+        $unlockPath = $pathGuard->normalizeRelativePath((string) ($_POST['requested_path'] ?? ''));
+        $isDirectoryRequest = (string) ($_POST['requested_kind'] ?? 'dir') === 'dir';
+        $searchQuery = trim((string) ($_POST['q'] ?? ''));
+        $protectedRoot = $folderPasswordManager->protectedRootFor($unlockPath);
+
+        if ($protectedRoot === null) {
+            header('Location: ' . browsebox_public_url($unlockPath, $isDirectoryRequest, $searchQuery), true, 303);
+            exit;
+        }
+
+        if (!$folderPasswordManager->unlock($unlockPath, (string) ($_POST['folder_password'] ?? ''))) {
+            browsebox_render_public_unlock_prompt(
+                $appName,
+                $csrf,
+                $unlockPath,
+                $isDirectoryRequest,
+                $searchQuery,
+                $protectedRoot,
+                $showNav,
+                $navActionHtml,
+                'Incorrect folder password.'
+            );
+        }
+
+        header('Location: ' . browsebox_public_url($unlockPath, $isDirectoryRequest, $searchQuery), true, 303);
+        exit;
+    } catch (RuntimeException $exception) {
+        try {
+            $unlockPath = $pathGuard->normalizeRelativePath((string) ($_POST['requested_path'] ?? ''));
+        } catch (RuntimeException) {
+            $unlockPath = '';
+        }
+
+        $protectedRoot = $folderPasswordManager->protectedRootFor($unlockPath) ?? $unlockPath;
+        browsebox_render_public_unlock_prompt(
+            $appName,
+            $csrf,
+            $unlockPath,
+            ((string) ($_POST['requested_kind'] ?? 'dir') === 'dir'),
+            trim((string) ($_POST['q'] ?? '')),
+            $protectedRoot,
+            $showNav,
+            $navActionHtml,
+            $exception->getMessage()
+        );
+    }
+}
+
 try {
     $normalizedPath = $pathGuard->normalizeRelativePath((string) $requestedPath);
+    $protectedRoot = $folderPasswordManager->protectedRootFor($normalizedPath);
+    $trustedHtml = $protectedRoot !== null && $folderPasswordManager->isAccessGranted($normalizedPath, $showNav);
+
+    if (!$folderPasswordManager->isAccessGranted($normalizedPath, $showNav)) {
+        if ($protectedRoot !== null) {
+            browsebox_render_public_unlock_prompt(
+                $appName,
+                $csrf,
+                $normalizedPath,
+                !($fileManager->exists($normalizedPath) && is_file($pathGuard->resolve($normalizedPath, true))),
+                $searchQuery,
+                $protectedRoot,
+                $showNav,
+                $navActionHtml
+            );
+        }
+    }
 
     if ($searchQuery === '' && $normalizedPath !== '' && $fileManager->exists($normalizedPath)) {
         $resolvedPath = $pathGuard->resolve($normalizedPath, true);
 
         if (is_file($resolvedPath)) {
-            $fileResponder->serve($normalizedPath, false, $showNav);
+            $fileResponder->serve($normalizedPath, false, $showNav, $trustedHtml);
         }
 
         $indexFile = $browser->directoryIndexFile($normalizedPath);
 
         if ($indexFile !== null) {
-            $fileResponder->serve($indexFile, false, $showNav);
+            $fileResponder->serve($indexFile, false, $showNav, $trustedHtml);
         }
     }
 
@@ -65,6 +191,15 @@ try {
             'breadcrumbs' => View::breadcrumbs($normalizedPath),
             'search' => $searchIndex->search($searchQuery),
         ];
+
+    if ($searchQuery !== '' && isset($result['search']) && is_array($result['search'])) {
+        $searchResults = array_values(array_filter(
+            is_array($result['search']['results'] ?? null) ? $result['search']['results'] : [],
+            static fn (array $searchResult): bool => $folderPasswordManager->isAccessGranted((string) ($searchResult['path'] ?? ''), $showNav)
+        ));
+        $result['search']['results'] = $searchResults;
+        $result['search']['count'] = count($searchResults);
+    }
 } catch (RuntimeException $exception) {
     http_response_code(str_contains($exception->getMessage(), 'exist') ? 404 : 400);
     View::renderPage(
@@ -121,22 +256,33 @@ foreach ($result['items'] as $item) {
     $archiveIconAsset = $assetPrefix . '/file-icons/archive.svg';
     $previewUrl = $imagePreviewUrl($item);
     $hasEntrypoint = $isDir && (bool) ($item['has_entrypoint'] ?? false);
+    $isPasswordProtected = $isDir && (bool) ($item['is_password_protected'] ?? false);
+    $hasAccess = !$isDir || $folderPasswordManager->isAccessGranted((string) ($item['relative_path'] ?? ''), $showNav);
     $faviconRelativePath = $isDir ? (string) ($item['favicon_relative_path'] ?? '') : '';
-    $faviconOverlayHtml = $faviconRelativePath !== ''
+    $faviconOverlayHtml = $faviconRelativePath !== '' && $hasAccess
         ? '<span class="browsebox-folder-favicon-overlay"><img src="' . View::h($fileHandlerPrefix . '?path=' . rawurlencode($faviconRelativePath)) . '" alt=""></span>'
         : '';
     $sizeLabel = View::formatSize(is_int($item['size']) ? $item['size'] : null);
     $modifiedLabel = View::formatDate(is_int($item['modified']) ? $item['modified'] : null);
     $metaLabel = $isDir ? 'Folder' : $sizeLabel;
-    $folderHintHtml = $hasEntrypoint
-        ? '<span class="browsebox-entrypoint-actions">'
+    $folderFlags = [];
+
+    if ($hasEntrypoint) {
+        $folderFlags[] = '<span class="browsebox-entrypoint-actions">'
             . '<span class="browsebox-entrypoint-badge">Web App</span>'
             . '<a class="browsebox-entrypoint-zip-icon" href="' . View::h($folderZipHref) . '" title="Download this web app folder as a ZIP archive" aria-label="Download this web app folder as a ZIP archive">'
                 . '<img src="' . View::h($archiveIconAsset) . '" alt="">'
             . '</a>'
-        . '</span>'
-        : '';
+        . '</span>';
+    }
+
+    if ($isPasswordProtected) {
+        $folderFlags[] = '<span class="browsebox-folder-lock-badge">Protected</span>';
+    }
+
+    $folderHintHtml = $folderFlags === [] ? '' : implode(' ', $folderFlags);
     $overlayHtml = $hasEntrypoint ? '<span class="browsebox-entrypoint-overlay">Web App</span>' : '';
+    $lockOverlayHtml = $isPasswordProtected ? '<span class="browsebox-folder-lock-overlay">Locked</span>' : '';
     $previewHtml = $previewUrl !== null
         ? '<img class="browsebox-file-preview" src="' . View::h($previewUrl) . '" alt="">'
         : '<img class="browsebox-file-icon" src="' . View::h($iconAsset) . '" alt="">';
@@ -160,6 +306,7 @@ foreach ($result['items'] as $item) {
                 <a class="browsebox-icon-card-main text-decoration-none" href="' . View::h($href) . '">
                     <div class="browsebox-icon-card-preview">
                         ' . $overlayHtml . '
+                        ' . $lockOverlayHtml . '
                         ' . $faviconOverlayHtml . '
                         ' . $previewHtml . '
                     </div>

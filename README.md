@@ -54,9 +54,11 @@ The script prompts for a password and stores a `password_hash()` value in [data/
 
 ## Storage
 
-Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). Generated image thumbnails are cached under [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails). The public browser supports both `List View` and `Icon View`, remembers the selected view in a persistent browser cookie, lists folders first, shows size and modified time, supports global search, supports client-side sortable columns in `List View`, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads, inline rendering, thumbnail responses, and on-demand ZIP archive downloads can be controlled safely. Normal folders expose their ZIP download action after you enter the folder, while folders detected as web apps expose a parent-level ZIP shortcut because opening them may hand control to the uploaded app.
+Public files live under [storage/files](/home/paul/git-repos/BrowseBox/storage/files). Generated image thumbnails are cached under [storage/thumbnails](/home/paul/git-repos/BrowseBox/storage/thumbnails). The public browser supports both `List View` and `Icon View`, remembers the selected view in a persistent browser cookie, lists folders first, shows size and modified time, supports global search, supports client-side sortable columns in `List View`, and serves files through [public/file.php](/home/paul/git-repos/BrowseBox/public/file.php) so downloads, inline rendering, thumbnail responses, and on-demand ZIP archive downloads can be controlled safely. Normal folders expose their ZIP download action after you enter the folder, while folders detected as web apps expose a parent-level ZIP shortcut because opening them may hand control to the uploaded app. Folders can also be protected with a per-folder password, which applies to the whole subtree rooted at that folder on the public side.
 
-`Icon View` uses local SVG file-type icons from [public/assets/file-icons](/home/paul/git-repos/BrowseBox/public/assets/file-icons). Folders that contain `favicon.ico`, `favicon.png`, or `favicon.svg` show that favicon as a small overlay in icon view. Raster image thumbnails are generated on demand and cached by file path plus file timestamp, so updated images automatically get a new thumbnail cache key. Thumbnail generation uses PHP GD when available; if GD is missing, image files fall back to their normal icon or inline image rendering.
+Protected folders are still rendered through the normal public pipeline after a successful unlock, so HTML web apps inside them can use browser storage and same-origin asset loading normally. That now also applies while you are logged into `/.mgmt`, because protected folders are treated as trusted content once unlocked.
+
+`Icon View` uses local SVG file-type icons from [public/assets/file-icons](/home/paul/git-repos/BrowseBox/public/assets/file-icons). Folders that contain `favicon.ico`, `favicon.png`, or `favicon.svg` show that favicon as a small overlay in icon view. Password-protected folders show a lock badge and lock overlay in public listings. Raster image thumbnails are generated on demand and cached by file path plus file timestamp, so updated images automatically get a new thumbnail cache key. Thumbnail generation uses PHP GD when available; if GD is missing, image files fall back to their normal icon or inline image rendering.
 
 ## Search
 
@@ -95,6 +97,7 @@ The management portal at `/.mgmt` supports:
 - desktop drag-and-drop upload for files and folders in supported browsers
 - explicit replace/cancel workflow when an uploaded file name already exists
 - folder creation
+- per-folder public password protection with simple set, change, and remove actions in `/.mgmt`
 - moving files and folders with direct drag-and-drop onto visible folders, breadcrumbs, and the persistent folder tree
 - copying files and folders to another folder
 - sortable `Name`, `Size`, and `Modified` columns in the main content list

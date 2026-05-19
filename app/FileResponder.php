@@ -10,7 +10,7 @@ final class FileResponder
     ) {
     }
 
-    public function serve(string $relativePath, bool $forceDownload = false, bool $forceSandbox = false): never
+    public function serve(string $relativePath, bool $forceDownload = false, bool $forceSandbox = false, bool $trustedHtml = false): never
     {
         $relativePath = $this->pathGuard->normalizeRelativePath($relativePath, false);
         $fullPath = $this->pathGuard->resolve($relativePath, true);
@@ -50,7 +50,7 @@ final class FileResponder
         header('Referrer-Policy: no-referrer');
         header('Content-Disposition: ' . $this->contentDispositionValue($inline ? 'inline' : 'attachment', basename($fullPath)));
 
-        if ($isInlineHtml && ($sandboxPublicHtml || $forceSandbox)) {
+        if ($isInlineHtml && (($sandboxPublicHtml && !$trustedHtml) || ($forceSandbox && !$trustedHtml))) {
             // Public HTML is intentionally supported, but it must not share a normal browser origin
             // with the management portal.
             header("Content-Security-Policy: sandbox allow-scripts allow-forms allow-downloads allow-modals");

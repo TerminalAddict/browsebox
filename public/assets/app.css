@@ -435,6 +435,20 @@ body.browsebox-body {
     gap: 0.35rem;
 }
 
+.browsebox-folder-lock-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.35rem;
+    padding: 0.08rem 0.48rem;
+    border-radius: 999px;
+    background: rgba(173, 120, 11, 0.14);
+    color: #8c5a00;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .browsebox-entrypoint-zip-icon {
     display: inline-flex;
     align-items: center;
@@ -534,6 +548,25 @@ body.browsebox-body {
     letter-spacing: 0.05em;
     text-transform: uppercase;
     box-shadow: 0 8px 16px rgba(11, 94, 215, 0.18);
+}
+
+.browsebox-folder-lock-overlay {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    padding: 0.1rem 0.52rem;
+    border-radius: 999px;
+    background: rgba(140, 90, 0, 0.9);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    box-shadow: 0 8px 16px rgba(140, 90, 0, 0.18);
 }
 
 .browsebox-folder-favicon-overlay {
